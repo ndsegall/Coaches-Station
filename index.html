@@ -2074,6 +2074,8 @@
 }
 .gc-sync-toast.gc-sync-show { transform: translateY(0); opacity: 1; }
 .gc-sync-toast.gc-sync-error { border-color: var(--bad-text); background: #7a1414; }
+#data-freshness-badge.fresh { background: var(--good-bg); color: var(--good-text); }
+#data-freshness-badge.stale { background: #f3d9d9; color: var(--bad-text); }
 
 
 
@@ -2088,6 +2090,7 @@
       <h1 style="margin:0;">Edmonton Oilers</h1>
       <span>Coaches Station</span>
     </div>
+    <div id="data-freshness-badge" style="display:none;font-size:0.68rem;font-weight:700;padding:0.2rem 0.55rem;border-radius:5px;white-space:nowrap;"></div>
   </div>
   <button class="header-btn" id="h2h-btn" style="display:none;">Game Preview</button>
   <button class="header-btn" id="schedule-btn" style="display:none">Schedule</button>
@@ -2101,6 +2104,8 @@
   <button class="upload-again" id="upload-again-btn" style="display:none">↑ Upload new file</button>
   <button class="header-btn" id="goal-data-btn" style="display:none" title="Upload the goal-category (GC) breakdown workbook">Goal Data</button>
   <input type="file" id="goal-data-input" accept=".xlsx,.xls" style="display:none">
+  <button class="header-btn" id="psf-upload-btn" style="display:none" title="Upload a single game's PSF playsequence CSV into the database">Upload Game</button>
+  <input type="file" id="psf-upload-input" accept=".csv" style="display:none">
 </header>
 
 <div class="upload-zone" id="upload-zone">
@@ -3999,6 +4004,7 @@ function processData(rows) {
   const dates = allData.map(r => r.date);
   minDate = dates[0];
   maxDate = dates[dates.length - 1];
+  renderDataFreshnessBadge();
 
   // Regular season ends April 16; playoffs start April 17
   playoffStart = '2026-04-17';
@@ -4010,6 +4016,7 @@ function processData(rows) {
   document.getElementById('app-layout').classList.add('visible');
   document.getElementById('upload-again-btn').style.display = 'block';
   document.getElementById('goal-data-btn').style.display = 'block';
+  document.getElementById('psf-upload-btn').style.display = 'block';
   document.getElementById('goal-cats-btn').style.display = 'block';
   document.getElementById('compare-btn-sidebar').style.display = 'block';
   document.getElementById('trend-btn').style.display = 'block';
@@ -4291,6 +4298,66 @@ function setDateRange(from, to) {
   // Store the "default" for this preset so reset knows where to go
   setDateRange._defaultFrom = from;
   setDateRange._defaultTo   = to;
+}
+
+// Checks whether the uploaded League Excel covers games through the most
+// recent night the NHL actually played — not just "yesterday," since an
+// off night (All-Star break, bye days, etc.) would make a plain calendar
+// comparison wrongly report stale data. Queries the NHL schedule API to
+// find the real most recent game date; falls back to a plain "yesterday"
+// comparison if that API is unreachable, so the badge still shows
+// *something* useful rather than breaking silently.
+//
+// NOTE: the NHL schedule endpoint's response shape here (`gameWeek` array
+// of `{date, games}`) is based on the commonly-documented public shape of
+// api-web.nhle.com — this couldn't be tested against the live API from
+// where this was built, so treat the first real use of this as the actual
+// verification, not something already confirmed working.
+async function getMostRecentNhlGameDate() {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  try {
+    const resp = await fetch(`https://api-web.nhle.com/v1/schedule/${todayStr}`);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const pastDaysWithGames = (data.gameWeek || [])
+      .filter(d => d.date < todayStr && Array.isArray(d.games) && d.games.length > 0)
+      .map(d => d.date)
+      .sort();
+    return pastDaysWithGames.length ? pastDaysWithGames[pastDaysWithGames.length - 1] : null;
+  } catch (e) {
+    console.warn('[data freshness] NHL schedule API unreachable, falling back to calendar-day comparison:', e);
+    return null;
+  }
+}
+
+async function renderDataFreshnessBadge() {
+  const el = document.getElementById('data-freshness-badge');
+  if (!el || !maxDate) return;
+  el.style.display = 'inline-block';
+  el.className = '';
+  el.textContent = 'Checking…';
+
+  let referenceDate = await getMostRecentNhlGameDate();
+  let usedFallback = false;
+  if (!referenceDate) {
+    // Fallback: plain "yesterday," same as a simple calendar check.
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    referenceDate = y.toISOString().slice(0, 10);
+    usedFallback = true;
+  }
+
+  const isCurrent = maxDate >= referenceDate;
+  if (isCurrent) {
+    el.textContent = 'Data Current';
+    el.className = 'fresh';
+  } else {
+    el.textContent = `Current through ${formatDisplayDate(maxDate)}`;
+    el.className = 'stale';
+  }
+  el.title = usedFallback
+    ? 'NHL schedule API unreachable — comparing against yesterday\'s date only, not confirmed game nights.'
+    : `Most recent NHL game night: ${referenceDate}`;
 }
 
 function formatDisplayDate(iso) {
@@ -4989,6 +5056,38 @@ document.getElementById('goal-data-btn').addEventListener('click', () => {
 document.getElementById('goal-data-input').addEventListener('change', e => {
   if (e.target.files[0]) loadGoalCategoryFile(e.target.files[0]);
 });
+
+// PSF game upload — sends a single game's playsequence CSV to the API to
+// be loaded into the database, the browser-based replacement for running
+// load_nhl.py locally each game. Unlike Goal Data, this has no client-side
+// fallback: the whole point is getting the game into the shared database,
+// so this requires the API to be reachable.
+document.getElementById('psf-upload-btn').addEventListener('click', () => {
+  document.getElementById('psf-upload-input').click();
+});
+document.getElementById('psf-upload-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  showGcSyncToast(`Uploading ${file.name}…`, false);
+  const formData = new FormData();
+  formData.append('file', file);
+  fetch(`${GC_API_BASE}/api/games/upload`, { method: 'POST', body: formData })
+    .then(async r => {
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.detail || `API responded ${r.status}`);
+      return body;
+    })
+    .then(result => {
+      const g = result.game;
+      const label = g ? `${g.awayTeamAbbrev} @ ${g.homeTeamAbbrev} (${g.gameDate})` : file.name;
+      showGcSyncToast(`Loaded ${label} — ${result.playsLoaded} plays`, false);
+    })
+    .catch(err => {
+      showGcSyncToast(`Upload failed: ${err.message}`, true);
+    });
+  e.target.value = ''; // allow re-selecting the same file later without needing to pick a different one first
+});
+
 
 
 // Controls
