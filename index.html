@@ -3261,6 +3261,7 @@ function enterEmptySeasonMode() {
   minDate = '2026-09-29';
   maxDate = '2027-04-10';
   playoffStart = '2027-04-11';
+  updateSeasonCutoffs();
 
   populateTeamSelect();
   populateSrkTeamSelect();
@@ -4449,6 +4450,7 @@ function processData(rows) {
 
   // Regular season ends April 16; playoffs start April 17
   playoffStart = '2026-04-17';
+  updateSeasonCutoffs();
 
   populateTeamSelect();
   populateSrkTeamSelect();
@@ -4480,7 +4482,7 @@ function processData(rows) {
 
   // Default to Regular Season
   setActivePreset('rs');
-  setDateRange(minDate, '2026-04-16');
+  setDateRange(minDate, RS_END);
   render();
 }
 
@@ -5459,8 +5461,8 @@ document.getElementById('scatter').addEventListener('click', e => {
 let activeSegment = 'rs';
 
 function getSegmentBounds(segment) {
-  if (segment === 'rs') return { start: minDate, end: '2026-04-16' };
-  if (segment === 'po') return { start: '2026-04-17', end: maxDate };
+  if (segment === 'rs') return { start: minDate, end: RS_END };
+  if (segment === 'po') return { start: PO_START, end: maxDate };
   return { start: minDate, end: maxDate };
 }
 
@@ -5957,9 +5959,22 @@ function daysBack(dateStr, n) {
 let hlSegment = 'rs'; // 'rs' or 'po'
 
 const RS_START = () => minDate;
-const RS_END   = '2026-04-16';
-const PO_START = '2026-04-17';
+// RS_END / PO_START used to be hardcoded to the 2025-26 boundary (Apr 16 /
+// 17, 2026), which would silently be wrong the moment 2026-27 (an 84-game
+// season with a different end date) became the active season. They're now
+// kept in sync with playoffStart -- which processData() and
+// enterEmptySeasonMode() already set correctly per season -- via
+// updateSeasonCutoffs(), called right after each of those assigns it.
+// The literal values here are just the initial fallback before any season
+// has loaded.
+let RS_END   = '2026-04-16';
+let PO_START = '2026-04-17';
 const PO_END   = () => maxDate;
+
+function updateSeasonCutoffs() {
+  PO_START = playoffStart;
+  RS_END = daysBack(playoffStart, 1);
+}
 
 function getHlDates() {
   if (hlSegment === 'rs') return { start: RS_START(), end: RS_END };
@@ -6764,14 +6779,14 @@ function drawTrendChart() {
   const canvas = document.getElementById('trend-chart');
   const team = document.getElementById('trend-team-select').value;
   const from = document.getElementById('trend-date-from').value || minDate;
-  const to   = document.getElementById('trend-date-to').value   || '2026-04-16';
+  const to   = document.getElementById('trend-date-to').value   || RS_END;
 
   const teamRows = allData.filter(r => r.team === team && r.date >= from && r.date <= to);
   const allGameDates = [...new Set(teamRows.map(r => r.date))].sort();
 
   // Full season dates for correct game numbering regardless of zoom
   const fullSeasonDates = [...new Set(
-    allData.filter(r => r.team === team && r.date <= '2026-04-16').map(r => r.date)
+    allData.filter(r => r.team === team && r.date <= RS_END).map(r => r.date)
   )].sort();
 
   // For windowed views, only plot the last N games
@@ -6843,7 +6858,7 @@ function drawTrendChart() {
     const cmpRows = allData.filter(r => r.team === trendCompareTeam && r.date >= from && r.date <= to);
     const cmpAllDates = [...new Set(cmpRows.map(r => r.date))].sort();
     const cmpDates = trendWindow === 0 ? cmpAllDates : cmpAllDates.slice(-trendWindow);
-    const cmpFullDates = [...new Set(allData.filter(r=>r.team===trendCompareTeam&&r.date<='2026-04-16').map(r=>r.date))].sort();
+    const cmpFullDates = [...new Set(allData.filter(r=>r.team===trendCompareTeam&&r.date<=RS_END).map(r=>r.date))].sort();
     cmpPoints = cmpDates.map((d, i) => {
       let rows;
       if (trendWindow === 0) { rows = cmpRows.filter(r => r.date <= d); }
@@ -7879,14 +7894,14 @@ document.getElementById('trend-cal-to-next').addEventListener('click', e => {
 });
 document.getElementById('trend-reset-from').addEventListener('click', () => {
   const team = document.getElementById('trend-team-select').value;
-  const rsDates = allData.filter(r => r.team === team && r.date <= '2026-04-16').map(r => r.date).sort();
+  const rsDates = allData.filter(r => r.team === team && r.date <= RS_END).map(r => r.date).sort();
   if (rsDates.length) document.getElementById('trend-date-from').value = rsDates[0];
   syncTrendDateDisplay('from');
   drawTrendChart(); drawTrendZoomMarkers();
 });
 document.getElementById('trend-reset-to').addEventListener('click', () => {
   const team = document.getElementById('trend-team-select').value;
-  const rsDates = allData.filter(r => r.team === team && r.date <= '2026-04-16').map(r => r.date).sort();
+  const rsDates = allData.filter(r => r.team === team && r.date <= RS_END).map(r => r.date).sort();
   if (rsDates.length) document.getElementById('trend-date-to').value = rsDates[rsDates.length - 1];
   syncTrendDateDisplay('to');
   drawTrendChart(); drawTrendZoomMarkers();
@@ -8033,7 +8048,7 @@ let standingsType = 'standard'; // 'standard' | 'expected'
 
 function buildExpectedStandingsData() {
   const from = document.getElementById('standings-date-from').value || minDate;
-  const to   = document.getElementById('standings-date-to').value   || '2026-04-16';
+  const to   = document.getElementById('standings-date-to').value   || RS_END;
 
   return teams.map(team => {
     const rows = allData.filter(r => r.team === team && r.date >= from && r.date <= to);
@@ -8245,7 +8260,7 @@ function renderStandingsActive() {
 
 function buildStandingsData() {
   const from = document.getElementById('standings-date-from').value || minDate;
-  const to   = document.getElementById('standings-date-to').value   || '2026-04-16';
+  const to   = document.getElementById('standings-date-to').value   || RS_END;
   const gamePairs = window._gamePairs || {};
 
   return teams.map(team => {
@@ -8486,7 +8501,7 @@ document.getElementById('standings-btn').addEventListener('click', () => {
   const sf = document.getElementById('standings-date-from');
   const st = document.getElementById('standings-date-to');
   if (!sf.value) sf.value = minDate;
-  if (!st.value) st.value = '2026-04-16';
+  if (!st.value) st.value = RS_END;
   syncStandingsDateDisplay('from');
   syncStandingsDateDisplay('to');
   document.getElementById('standings-overlay').classList.add('visible');
@@ -8501,7 +8516,7 @@ document.getElementById('standings-reset-from').addEventListener('click', () => 
   renderStandingsActive();
 });
 document.getElementById('standings-reset-to').addEventListener('click', () => {
-  document.getElementById('standings-date-to').value = '2026-04-16';
+  document.getElementById('standings-date-to').value = RS_END;
   syncStandingsDateDisplay('to');
   renderStandingsActive();
 });
@@ -10293,7 +10308,7 @@ function buildLeagueCalendar() {
     for (let day=1; day<=daysInMonth; day++) {
       const iso = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
       const count = dates[iso];
-      const isPo = iso >= '2026-04-17';
+      const isPo = iso >= PO_START;
       if (count) {
         const bg = isPo ? '#dbeeff' : 'var(--surface2)';
         const textCol = isPo ? '#004a99' : 'var(--text)';
@@ -10486,8 +10501,6 @@ function renderLeagueSchedule() {
 }
 
 function getScheduleGames(team, segment) {
-  const RS_END   = '2026-04-16';
-  const PO_START = '2026-04-17';
   const rows = allData.filter(r => {
     if (r.team !== team) return false;
     if (segment === 'rs') return r.date <= RS_END;
@@ -11274,7 +11287,7 @@ function renderSchedule() {
       const gameRow  = allData.find(r => r.team === team && r.date === gameDate && r.homeTeam === homeT && r.awayTeam === awayT);
       if (!gameRow) return;
       const oppRow   = getOpponentRow(gameRow);
-      const isPo     = gameDate >= '2026-04-17';
+      const isPo     = gameDate >= PO_START;
       const detailHtml = renderScheduleDetail(gameRow, oppRow, team, isPo);
       row.insertAdjacentHTML('afterend', detailHtml);
       setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
@@ -13097,6 +13110,234 @@ document.addEventListener('keydown', e => {
     exportOverlay.classList.remove('visible');
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// URL ROUTING — hash-based deep links for the main modal/overlay views.
+//
+// Scope (deliberate): which top-level overlay is open, plus the small set
+// of "which sub-view within it" state that's cheap and safe to replay —
+// Pre-Scout Prep's role tab, Standings' nested playoff-series modal, and
+// Goal Categories' nested search panel. This does NOT track every filter
+// inside a modal (date ranges, sort order, expanded schedule rows, trend
+// zoom, etc.) — deliberately left out per the earlier scope discussion.
+// Also not covered: export-overlay (transient canvas export that closes
+// itself), the Compare sidebar panel, and the PSF/GC-Excel file-picker
+// buttons (there's no modal there to link to).
+//
+// Design: this never duplicates existing open/close logic. Opening still
+// happens by literally clicking the real button (so every bit of existing
+// setup/populate/render code runs exactly as it always has) — the router
+// only decides *which* button to click when the hash changes. Closing is
+// still 100% the existing code (Close buttons, backdrop clicks, Escape
+// handlers). A MutationObserver watches every tracked overlay's `visible`
+// class and reflects whatever is actually open back into the hash, so
+// nothing here can drift out of sync with the real DOM state.
+// ═══════════════════════════════════════════════════════════════════════
+(function () {
+  'use strict';
+
+  function isVisible(id) {
+    return !!document.getElementById(id)?.classList.contains('visible');
+  }
+
+  // Clicking a hidden/disabled header button (e.g. an admin-only route
+  // hash followed by a non-admin user) should be a no-op, not a bypass of
+  // whatever the existing display:none / header-btn-disabled gating meant.
+  function clickIfAvailable(id) {
+    const el = document.getElementById(id);
+    if (el && el.style.display !== 'none' && !el.classList.contains('header-btn-disabled')) {
+      el.click();
+    }
+  }
+
+  // Captures the one bit of "what's open" state that isn't visible as a
+  // DOM class: which two teams the nested playoff-series modal was opened
+  // for (openPoSeriesModal takes them as plain function args). Wrapping
+  // rather than editing the function in place keeps this whole feature
+  // isolated to this block.
+  if (typeof window.openPoSeriesModal === 'function') {
+    const _origOpenPoSeriesModal = window.openPoSeriesModal;
+    window.openPoSeriesModal = function (tA, tB) {
+      window._lastPoSeriesTeams = tA + '-' + tB;
+      return _origOpenPoSeriesModal(tA, tB);
+    };
+  }
+
+  // hash "o" value -> how to (re)open that route from a cold start, by
+  // replaying the real click(s) a person would make.
+  const ROUTES = {
+    'league-stats': {
+      open: () => clickIfAvailable('league-stats-btn'),
+    },
+    'prep': {
+      open: (params) => {
+        clickIfAvailable('h2h-btn');
+        const role = params.get('role');
+        if (role) {
+          document.querySelector(`#h2h-role-buttons .prep-role-btn[data-role="${role}"]`)?.click();
+        }
+      },
+    },
+    'trend': {
+      open: () => clickIfAvailable('trend-btn'),
+    },
+    'standings': {
+      open: (params) => {
+        clickIfAvailable('standings-btn');
+        const po = params.get('po');
+        if (po && po.includes('-')) {
+          const [tA, tB] = po.split('-');
+          if (tA && tB && typeof window.openPoSeriesModal === 'function') {
+            window.openPoSeriesModal(tA, tB);
+          }
+        }
+      },
+    },
+    'schedule': {
+      open: () => clickIfAvailable('schedule-btn'),
+    },
+    'scores': {
+      open: () => clickIfAvailable('scores-btn'),
+    },
+    'goal-cats': {
+      open: (params) => {
+        clickIfAvailable('goal-cats-btn');
+        if (params.get('search') === '1') clickIfAvailable('gc-search-btn');
+      },
+    },
+    'gc-uploader': {
+      open: () => clickIfAvailable('goal-data-btn'),
+    },
+    'admin': {
+      open: () => clickIfAvailable('admin-panel-btn'),
+    },
+    'slc': {
+      open: () => clickIfAvailable('slc-open-btn'),
+    },
+  };
+
+  // Every overlay id the router needs to know about, either as a primary
+  // route (must be watched so the hash reflects it opening/closing) or as
+  // nested state on top of one (po-series on Standings, gc-search on
+  // Goal Categories).
+  const OBSERVE_IDS = [
+    'stat-rank-overlay', 'h2h-overlay', 'trend-overlay', 'standings-overlay',
+    'po-series-overlay', 'schedule-overlay', 'goal-cats-overlay',
+    'gc-search-overlay', 'gc-uploader-overlay', 'admin-panel-overlay', 'slc-overlay',
+  ];
+
+  // Reads current DOM state and produces the hash string that describes
+  // it. Mutually-exclusive top-level overlays are checked in a fixed
+  // order; nested state is folded into the same route.
+  function computeHashFromDom() {
+    const p = new URLSearchParams();
+    if (isVisible('schedule-overlay')) {
+      const teamControlsShown = document.getElementById('sched-team-controls')?.style.display !== 'none';
+      p.set('o', teamControlsShown ? 'schedule' : 'scores');
+    } else if (isVisible('h2h-overlay')) {
+      p.set('o', 'prep');
+      const role = document.getElementById('h2h-role-select')?.value;
+      if (role) p.set('role', role);
+    } else if (isVisible('standings-overlay')) {
+      p.set('o', 'standings');
+      if (isVisible('po-series-overlay') && window._lastPoSeriesTeams) {
+        p.set('po', window._lastPoSeriesTeams);
+      }
+    } else if (isVisible('goal-cats-overlay')) {
+      p.set('o', 'goal-cats');
+      if (isVisible('gc-search-overlay')) p.set('search', '1');
+    } else if (isVisible('stat-rank-overlay')) {
+      p.set('o', 'league-stats');
+    } else if (isVisible('trend-overlay')) {
+      p.set('o', 'trend');
+    } else if (isVisible('gc-uploader-overlay')) {
+      p.set('o', 'gc-uploader');
+    } else if (isVisible('admin-panel-overlay')) {
+      p.set('o', 'admin');
+    } else if (isVisible('slc-overlay')) {
+      p.set('o', 'slc');
+    }
+    return p.toString(); // '' when nothing tracked is open
+  }
+
+  // `lastAppliedHash` is what WE last wrote (from DOM -> hash, or hash ->
+  // DOM). Comparing against it lets the two directions below tell "a
+  // person navigated" apart from "I just caused this myself" without any
+  // extra flags, so the two effects below can't loop.
+  let lastAppliedHash = null;
+  let syncScheduled = false;
+
+  // DOM -> hash. Runs once per animation frame no matter how many overlay
+  // mutations happened in between, so multi-step opens (e.g. Standings
+  // then the nested series modal) settle into a single history entry
+  // with the final combined state, not one entry per intermediate step.
+  function scheduleSyncHashFromDom() {
+    if (syncScheduled) return;
+    syncScheduled = true;
+    requestAnimationFrame(() => {
+      syncScheduled = false;
+      const newHash = computeHashFromDom();
+      if (newHash === location.hash.replace(/^#/, '')) return;
+      lastAppliedHash = newHash;
+      // Plain assignment (not replaceState) is intentional — it's what
+      // gives us native back/forward support for free.
+      location.hash = newHash;
+    });
+  }
+
+  OBSERVE_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    new MutationObserver(scheduleSyncHashFromDom)
+      .observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+  // Role changes swap a hidden <select>'s value rather than toggling any
+  // overlay's visible class, so they need their own explicit hook to be
+  // picked up by the DOM -> hash direction above.
+  document.querySelectorAll('#h2h-role-buttons .prep-role-btn').forEach(btn => {
+    btn.addEventListener('click', scheduleSyncHashFromDom);
+  });
+
+  function closeAllTrackedOverlays() {
+    OBSERVE_IDS.forEach(id => document.getElementById(id)?.classList.remove('visible'));
+  }
+
+  // hash -> DOM. Always reconciles from a clean slate (close everything
+  // tracked, then open exactly what the hash says) rather than trying to
+  // diff old vs. new state — simpler, and correct for every case including
+  // back-stepping out of a nested modal (e.g. Standings+series -> Standings).
+  function applyHashRoute() {
+    const raw = location.hash.replace(/^#/, '');
+    if (raw === lastAppliedHash) return; // we caused this change ourselves
+    lastAppliedHash = raw;
+    closeAllTrackedOverlays();
+    if (!raw) return;
+    const params = new URLSearchParams(raw);
+    const route = ROUTES[params.get('o')];
+    if (route) route.open(params);
+  }
+
+  window.addEventListener('hashchange', applyHashRoute);
+
+  // Apply whatever hash is already in the address bar (bookmark, shared
+  // link, or a page reload) once the app has actually finished logging in
+  // and loading data — every route above assumes the header buttons it
+  // clicks are live. Polls briefly rather than hooking into the
+  // login/session-restore code paths directly, to keep this feature
+  // fully self-contained and low-risk to add.
+  (function waitForAppReadyThenApplyInitialRoute() {
+    let attempts = 0;
+    (function tryNow() {
+      attempts++;
+      if (document.getElementById('app-layout')?.classList.contains('visible')) {
+        applyHashRoute();
+        return;
+      }
+      if (attempts > 200) return; // ~20s — give up quietly, no error needed
+      setTimeout(tryNow, 100);
+    })();
+  })();
+})();
 
 </script>
 

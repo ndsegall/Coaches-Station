@@ -270,7 +270,7 @@ const SmithTab = (function () {
         const gameRow  = allData.find(r => r.team === teamA && r.date === gameDate && r.homeTeam === homeT && r.awayTeam === awayT);
         if (!gameRow) return;
         const oppRow   = getOpponentRow(gameRow);
-        const isPo     = gameDate >= '2026-04-17';
+        const isPo     = gameDate >= PO_START;
         row.insertAdjacentHTML('afterend', renderScheduleDetail(gameRow, oppRow, teamA, isPo));
       });
     });
@@ -290,7 +290,7 @@ const SmithTab = (function () {
         const gameRow  = allData.find(r => r.team === teamB && r.date === gameDate && r.homeTeam === homeT && r.awayTeam === awayT);
         if (!gameRow) return;
         const oppRow   = getOpponentRow(gameRow);
-        const isPo     = gameDate >= '2026-04-17';
+        const isPo     = gameDate >= PO_START;
         row.insertAdjacentHTML('afterend', renderScheduleDetail(gameRow, oppRow, teamB, isPo));
       });
     });

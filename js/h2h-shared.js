@@ -500,7 +500,7 @@ function buildH2HContext(teamA, teamB, matchups, bMatchups) {
     const asDeltaStyle = deltaCellStyle(asDelta, h2hMaxAsDelta);
     const evDeltaStr = (evDelta >= 0 ? '+' : '') + evDelta.toFixed(2);
     const asDeltaStr = (asDelta >= 0 ? '+' : '') + asDelta.toFixed(2);
-    const isPo = g.date >= '2026-04-17';
+    const isPo = g.date >= PO_START;
     const key = `${g.date}_${g.homeTeam}_${g.awayTeam}`;
     const rowCls = isPo ? 'sched-game-row po-row' : 'sched-game-row';
     return `<div class="${rowCls}" data-gamekey="${key}" data-date="${g.date}" data-home="${g.homeTeam}" data-away="${g.awayTeam}">
@@ -532,7 +532,7 @@ function buildH2HContext(teamA, teamB, matchups, bMatchups) {
     const asDeltaStyle = deltaCellStyle(asDelta, vsMaxAsDelta);
     const evDeltaStr = (evDelta >= 0 ? '+' : '') + evDelta.toFixed(2);
     const asDeltaStr = (asDelta >= 0 ? '+' : '') + asDelta.toFixed(2);
-    const isPo = g.date >= '2026-04-17';
+    const isPo = g.date >= PO_START;
     const key = `${g.date}_${g.homeTeam}_${g.awayTeam}`;
     const rowCls = isPo ? 'sched-game-row po-row' : 'sched-game-row';
     return `<div class="${rowCls}" data-gamekey="${key}" data-date="${g.date}" data-home="${g.homeTeam}" data-away="${g.awayTeam}">
