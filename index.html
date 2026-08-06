@@ -582,6 +582,27 @@
   }
   .prep-role-btn:hover { border-color: var(--oilers-orange); color: var(--text); }
   .prep-role-btn.active { background: var(--oilers-orange); border-color: var(--oilers-orange); color: #fff; }
+  /* Pre-Scout Prep game picker — replaces the single "next game" title
+     line with clickable boxes for the next several EDM games, so a coach
+     can scout any of them, not just the literal next one. */
+  .prep-game-box {
+    background: none;
+    border: 1px solid var(--header-border, var(--border));
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    font-family: 'Rubik', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+    line-height: 1.25;
+    min-width: 108px;
+  }
+  .prep-game-box:hover { border-color: var(--oilers-orange); }
+  .prep-game-box.active { background: var(--oilers-orange); border-color: var(--oilers-orange); }
+  .prep-game-box .prep-game-box-line1 { font-size: 0.78rem; font-weight: 700; color: var(--text); }
+  .prep-game-box .prep-game-box-line2 { font-size: 0.72rem; color: var(--text3); margin-top: 1px; }
+  .prep-game-box.active .prep-game-box-line1, .prep-game-box.active .prep-game-box-line2 { color: #fff; }
+  .prep-game-box.loading { opacity: 0.55; pointer-events: none; }
   /* Used when a selected season has no real data yet (e.g. 2026-27 before
      puck drop) — visually dims header controls and blocks interaction
      without needing to touch each feature's own logic. */
@@ -2524,7 +2545,7 @@
   <div class="trend-modal" style="width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;padding:1.25rem 1.5rem;display:flex;flex-direction:column;box-sizing:border-box;">
     <div class="trend-modal-header" style="align-items:flex-start;">
       <div style="display:flex;flex-direction:column;gap:0.5rem;">
-        <h2 id="h2h-prep-title" style="margin:0;font-size:1.1rem;">Loading…</h2>
+        <div id="h2h-game-picker" style="display:flex;gap:0.4rem;flex-wrap:wrap;">Loading…</div>
         <div id="h2h-role-buttons" style="display:flex;gap:0.4rem;flex-wrap:wrap;">
           <button class="prep-role-btn" data-role="head-coach">Babcock</button>
           <button class="prep-role-btn" data-role="smith">Smith</button>
@@ -2537,10 +2558,11 @@
       </div>
       <button class="trend-close" id="h2h-close">Close</button>
     </div>
-    <!-- Hidden — Pre-Scout Prep is always EDM vs. the precomputed next
-         opponent now (see renderPrepHeader), but the role-branch rendering
-         functions below still read these two elements by id, so they stay
-         in the DOM rather than requiring a rewrite of that logic. -->
+    <!-- Hidden — Pre-Scout Prep is always EDM vs. whichever game is
+         selected in the game picker (see selectPrepGame/renderPrepHeader),
+         but the role-branch rendering functions below still read these two
+         elements by id, so they stay in the DOM rather than requiring a
+         rewrite of that logic. -->
     <select id="h2h-team-a" style="display:none;"><option value="ANA"></option><option value="BOS"></option><option value="BUF"></option><option value="CAR"></option><option value="CBJ"></option><option value="CGY"></option><option value="CHI"></option><option value="COL"></option><option value="DAL"></option><option value="DET"></option><option value="EDM"></option><option value="FLA"></option><option value="LAK"></option><option value="MIN"></option><option value="MTL"></option><option value="NJD"></option><option value="NSH"></option><option value="NYI"></option><option value="NYR"></option><option value="OTT"></option><option value="PHI"></option><option value="PIT"></option><option value="SEA"></option><option value="SJS"></option><option value="STL"></option><option value="TBL"></option><option value="TOR"></option><option value="UTA"></option><option value="VAN"></option><option value="VGK"></option><option value="WPG"></option><option value="WSH"></option></select>
     <select id="h2h-team-b" style="display:none;"><option value="ANA"></option><option value="BOS"></option><option value="BUF"></option><option value="CAR"></option><option value="CBJ"></option><option value="CGY"></option><option value="CHI"></option><option value="COL"></option><option value="DAL"></option><option value="DET"></option><option value="EDM"></option><option value="FLA"></option><option value="LAK"></option><option value="MIN"></option><option value="MTL"></option><option value="NJD"></option><option value="NSH"></option><option value="NYI"></option><option value="NYR"></option><option value="OTT"></option><option value="PHI"></option><option value="PIT"></option><option value="SEA"></option><option value="SJS"></option><option value="STL"></option><option value="TBL"></option><option value="TOR"></option><option value="UTA"></option><option value="VAN"></option><option value="VGK"></option><option value="WPG"></option><option value="WSH"></option></select>
     <select id="h2h-role-select" style="display:none;">
@@ -9695,27 +9717,130 @@ function renderPkVisualsPanel() {
 let _prepData = null;
 let _prepDataPromise = null;
 
+// Game-picker state (the next several EDM games, not just the literal
+// next one). _prepSelectedGameId tracks which one is currently loaded
+// into _prepData, so the background refresh below can tell "still
+// looking at the next game" apart from "coach clicked into game 3" and
+// avoid silently yanking them back to game 1.
+let _prepUpcomingGames = [];
+let _prepUpcomingGamesLoaded = false;
+let _prepSelectedGameId = null;
+
 async function fetchPrepData(force = false) {
   if (force) { _prepData = null; _prepDataPromise = null; }
   if (_prepDataPromise) return _prepDataPromise;
   _prepDataPromise = apiFetch('/api/prep/next-game')
     .then(r => r.ok ? r.json() : null)
     .then(data => {
-      _prepData = data;
-      // If Pre-Scout Prep is already open (e.g. this resolved a beat
-      // after the panel opened), refresh what's on screen automatically.
-      if (document.getElementById('h2h-overlay')?.classList.contains('visible')) {
-        renderPrepHeader();
-        renderTopScorersPanel();
-    renderPkReportPanel();
-    renderPkVisualsPanel();
-    renderPpReportPanel();
-    renderPpVisualsPanel();
+      // Only adopt this refresh if nothing's been explicitly selected yet,
+      // or the selection already was "the next game" — a coach looking at
+      // game 3 shouldn't get yanked back to game 1 just because this
+      // (unrelated) background refresh landed.
+      const stillOnNextGame = _prepSelectedGameId == null || (_prepData && _prepData.gameId === _prepSelectedGameId);
+      if (stillOnNextGame) {
+        _prepData = data;
+        _prepSelectedGameId = data && data.gameId != null ? data.gameId : _prepSelectedGameId;
+        // If Pre-Scout Prep is already open (e.g. this resolved a beat
+        // after the panel opened), refresh what's on screen automatically.
+        if (document.getElementById('h2h-overlay')?.classList.contains('visible')) {
+          renderPrepHeader();
+          renderTopScorersPanel();
+          renderPkReportPanel();
+          renderPkVisualsPanel();
+          renderPpReportPanel();
+          renderPpVisualsPanel();
+        }
       }
       return data;
     })
     .catch(() => null);
   return _prepDataPromise;
+}
+
+// Lightweight schedule-only fetch for the game-picker boxes — separate
+// from fetchPrepData's heavier per-opponent payload so the boxes render
+// instantly even while the full stats for game 1 (or whichever game a
+// coach clicks into) are still loading.
+async function fetchUpcomingGames(force = false) {
+  if (!force && _prepUpcomingGamesLoaded) return _prepUpcomingGames;
+  try {
+    const r = await apiFetch('/api/prep/upcoming-games');
+    const data = r.ok ? await r.json() : null;
+    _prepUpcomingGames = (data && data.games) || [];
+  } catch {
+    _prepUpcomingGames = [];
+  }
+  _prepUpcomingGamesLoaded = true;
+  return _prepUpcomingGames;
+}
+
+// 'Sep. 29, 2026' — same short-month format as formatPrepGameDate but
+// with the period the game-picker boxes use.
+function formatPrepGameDateShort(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate();
+  const year = d.getFullYear();
+  return `${month}. ${day}, ${year}`;
+}
+
+function renderPrepGamePicker() {
+  const el = document.getElementById('h2h-game-picker');
+  if (!el) return;
+  if (!_prepUpcomingGames.length) {
+    el.textContent = _prepUpcomingGamesLoaded ? 'No upcoming Oilers games found' : 'Loading…';
+    return;
+  }
+  el.innerHTML = _prepUpcomingGames.map(g => {
+    const oppName = TEAM_NAMES[g.opponent] || g.opponent;
+    const vsAt = g.isHome ? 'vs' : '@';
+    const active = g.gameId === _prepSelectedGameId;
+    return `<button class="prep-game-box${active ? ' active' : ''}" data-gameid="${g.gameId}" title="${oppName}">
+      <div class="prep-game-box-line1">Game ${g.gameNumber != null ? g.gameNumber : ''} ${vsAt} ${g.opponent}</div>
+      <div class="prep-game-box-line2">${formatPrepGameDateShort(g.gameDate)}</div>
+    </button>`;
+  }).join('');
+  el.querySelectorAll('.prep-game-box').forEach(btn => {
+    btn.addEventListener('click', () => selectPrepGame(Number(btn.dataset.gameid)));
+  });
+}
+
+// Switches Pre-Scout Prep over to a different one of the picker's games.
+// Reuses _prepData/renderH2H/the bonus panels completely unchanged — they
+// all just read whatever's currently in _prepData, so swapping its
+// contents and re-running the same render sequence fetchPrepData already
+// uses is all that's needed here.
+async function selectPrepGame(gameId) {
+  if (gameId === _prepSelectedGameId) return;
+  const match = _prepUpcomingGames.find(g => g.gameId === gameId);
+  if (!match) return;
+
+  _prepSelectedGameId = gameId;
+  renderPrepGamePicker(); // instant visual feedback on which box is active
+  document.getElementById('h2h-content').innerHTML =
+    '<div style="padding:3rem;text-align:center;color:var(--text3);font-size:0.85rem;">Loading…</div>';
+
+  try {
+    const r = await apiFetch(`/api/prep/game/${gameId}`);
+    if (!r.ok) throw new Error(`API responded ${r.status}`);
+    const data = await r.json();
+    // Another click could have landed while this was in flight — if so,
+    // this response is stale and shouldn't overwrite whatever's newer.
+    if (_prepSelectedGameId !== gameId) return;
+    _prepData = data;
+    renderPrepHeader();
+    renderH2H();
+    renderTopScorersPanel();
+    renderPkReportPanel();
+    renderPkVisualsPanel();
+    renderPpReportPanel();
+    renderPpVisualsPanel();
+  } catch (e) {
+    if (_prepSelectedGameId !== gameId) return;
+    document.getElementById('h2h-content').innerHTML =
+      `<div style="padding:3rem;text-align:center;color:var(--bad-text);font-size:0.85rem;">Couldn't load this game — ${e.message}.</div>`;
+  }
 }
 
 function formatSecondsToToi(sec) {
@@ -10115,16 +10240,8 @@ function renderPpVisualsPanel() {
 // working completely unchanged even though there's no visible picker
 // driving them anymore.
 function renderPrepHeader() {
-  const titleEl = document.getElementById('h2h-prep-title');
-  if (!titleEl) return;
-  if (!_prepData || !_prepData.opponent) {
-    titleEl.textContent = _prepData ? 'No upcoming Oilers game found' : 'Loading…';
-    return;
-  }
-  const oppName = TEAM_NAMES[_prepData.opponent] || _prepData.opponent;
-  const vsAt = _prepData.isHome ? 'vs' : '@';
-  const gameNum = _prepData.gameNumber ? `Game ${_prepData.gameNumber}` : '';
-  titleEl.textContent = `Edmonton Oilers ${vsAt} ${oppName} — ${gameNum} — ${formatPrepGameDate(_prepData.gameDate)}`;
+  renderPrepGamePicker();
+  if (!_prepData || !_prepData.opponent) return;
 
   const teamASel = document.getElementById('h2h-team-a');
   const teamBSel = document.getElementById('h2h-team-b');
@@ -10230,7 +10347,15 @@ document.getElementById('h2h-btn').addEventListener('click', async () => {
   applyAccountDefaultRole();
   renderPrepRoleButtons();
   document.getElementById('h2h-overlay').classList.add('visible');
-  await fetchPrepData(); // near-instant: this is almost always already warm
+  // Both near-instant once warm: fetchPrepData is the existing "next
+  // game" payload (unchanged), fetchUpcomingGames is just the lightweight
+  // schedule list for the picker boxes.
+  await Promise.all([fetchPrepData(), fetchUpcomingGames()]);
+  if (_prepSelectedGameId == null) {
+    _prepSelectedGameId = (_prepData && _prepData.gameId != null)
+      ? _prepData.gameId
+      : (_prepUpcomingGames[0] && _prepUpcomingGames[0].gameId) || null;
+  }
   renderPrepHeader();
   renderH2H();
 });
@@ -13176,6 +13301,25 @@ document.addEventListener('keydown', e => {
         if (role) {
           document.querySelector(`#h2h-role-buttons .prep-role-btn[data-role="${role}"]`)?.click();
         }
+        const gameParam = params.get('game');
+        if (gameParam) {
+          const gameId = Number(gameParam);
+          // The picker's schedule list loads asynchronously right after
+          // the click above — poll briefly for it rather than assuming
+          // it's already there (same idea as the initial-route wait
+          // further down). selectPrepGame no-ops if this already matches
+          // whatever loaded by default, so no redundant fetch either way.
+          let attempts = 0;
+          (function trySelectGame() {
+            attempts++;
+            if (typeof selectPrepGame === 'function' && Array.isArray(_prepUpcomingGames) && _prepUpcomingGames.some(g => g.gameId === gameId)) {
+              selectPrepGame(gameId);
+              return;
+            }
+            if (attempts > 50) return; // ~5s — give up quietly
+            setTimeout(trySelectGame, 100);
+          })();
+        }
       },
     },
     'trend': {
@@ -13238,6 +13382,9 @@ document.addEventListener('keydown', e => {
       p.set('o', 'prep');
       const role = document.getElementById('h2h-role-select')?.value;
       if (role) p.set('role', role);
+      if (typeof _prepSelectedGameId !== 'undefined' && _prepSelectedGameId != null) {
+        p.set('game', String(_prepSelectedGameId));
+      }
     } else if (isVisible('standings-overlay')) {
       p.set('o', 'standings');
       if (isVisible('po-series-overlay') && window._lastPoSeriesTeams) {
@@ -13296,6 +13443,13 @@ document.addEventListener('keydown', e => {
   // picked up by the DOM -> hash direction above.
   document.querySelectorAll('#h2h-role-buttons .prep-role-btn').forEach(btn => {
     btn.addEventListener('click', scheduleSyncHashFromDom);
+  });
+  // Game-picker boxes are re-rendered from scratch on every
+  // renderPrepGamePicker() call (innerHTML replaced), so a one-time
+  // querySelectorAll like the role buttons above won't keep working —
+  // delegate from the stable parent container instead.
+  document.getElementById('h2h-game-picker')?.addEventListener('click', e => {
+    if (e.target.closest('.prep-game-box')) scheduleSyncHashFromDom();
   });
 
   function closeAllTrackedOverlays() {
