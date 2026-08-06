@@ -946,6 +946,11 @@
     padding-bottom: 0.35rem;
     border-bottom: 1px solid var(--border);
   }
+  /* Season boxes in blue, Last-5 boxes in red -- same two colors already
+     used for positive/negative analytics values (.stat-card.positive /
+     .stat-card.negative), applied via h2hTitleClass() at render time. */
+  .h2h-overview-title.title-season { color: #296bbe; }
+  .h2h-overview-title.title-last5 { color: #ba0c0c; }
   .h2h-overview-grid {
     display: grid;
     grid-template-columns: minmax(160px, 190px) 1fr 1fr;
@@ -1053,7 +1058,8 @@
   .ts-header:nth-child(2) { text-align: left; }
   .ts-cell {
     font-family: 'DM Mono', monospace;
-    font-size: 0.72rem;
+    font-size: 0.78rem;
+    font-weight: 600;
     color: var(--text);
     padding: 0.22rem 0.35rem;
     border-bottom: 1px solid var(--border);
@@ -9621,21 +9627,21 @@ function pkVisualsPanelHTML(name) {
   return `
     <div class="h2h-overview-wrapper" style="margin-top:0;">
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — PKFC Entry Spots (Season)</div>
+        <div class="h2h-overview-title title-season">${name} — PKFC Entry Spots (Season)</div>
         <canvas id="pk-entry-heatmap-season" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — PKFC Entry Spots (Last 5 GP)</div>
+        <div class="h2h-overview-title title-last5">${name} — PKFC Entry Spots (Last 5 GP)</div>
         <canvas id="pk-entry-heatmap-last5" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
     </div>
     <div class="h2h-overview-wrapper" style="margin-top:0.75rem;">
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — Shot Attempts vs. PK Heat Map (Season)</div>
+        <div class="h2h-overview-title title-season">${name} — Shot Attempts vs. PK Heat Map (Season)</div>
         <canvas id="pk-shot-heatmap-season" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — Shot Attempts vs. PK Heat Map (Last 5 GP)</div>
+        <div class="h2h-overview-title title-last5">${name} — Shot Attempts vs. PK Heat Map (Last 5 GP)</div>
         <canvas id="pk-shot-heatmap-last5" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
     </div>`;
@@ -9788,13 +9794,13 @@ function topScorersHTML(teamAbbr, data) {
   return `
     <div class="h2h-overview-wrapper" style="margin-top:0;">
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — Top Scorers (Season)</div>
+        <div class="h2h-overview-title title-season">${name} — Top Scorers (Season)</div>
         ${scorersTableHTML(data.season.forwards, 'Forwards (Top 6)')}
         ${scorersTableHTML(data.season.defense, 'Defense (Top 4)')}
         ${goalieTableHTML(data.season.goalies, 'Goalies')}
       </div>
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — Top Scorers (Last 5 GP)</div>
+        <div class="h2h-overview-title title-last5">${name} — Top Scorers (Last 5 GP)</div>
         ${scorersTableHTML(data.last5.forwards, 'Forwards (Top 6)')}
         ${scorersTableHTML(data.last5.defense, 'Defense (Top 4)')}
         ${goalieTableHTML(data.last5.goalies, 'Goalies')}
@@ -9845,12 +9851,26 @@ function entryDefenseBreakdownHTML(breakdown) {
   }).join('');
 }
 
+// Season boxes get the blue we use for positive/analytics values (#296bbe),
+// Last-5 boxes get the red (#ba0c0c) -- same two colors as .stat-card.positive
+// and .stat-card.negative elsewhere, so this isn't a new color, just reusing
+// the existing one. Classifies off the title/label text itself so every box
+// following the site's existing "(Season)" / "(Last 5 GP)" / "FULL SEASON" /
+// "LAST 5 GAMES" naming convention picks up the right color automatically --
+// a box with neither marker (e.g. "PENALTY KILL") is left at the default color.
+function h2hTitleClass(text) {
+  const t = String(text || '').toUpperCase();
+  if (t.includes('LAST 5')) return 'title-last5';
+  if (t.includes('SEASON')) return 'title-season';
+  return '';
+}
+
 function pkReportBoxHTML(name, label, pk) {
   const fo = pk.faceoffs;
   const ze = pk.zoneEntryDefense;
   return `
     <div class="h2h-overview">
-      <div class="h2h-overview-title">${name} — PK Report (${label})</div>
+      <div class="h2h-overview-title ${h2hTitleClass(label)}">${name} — PK Report (${label})</div>
       <div class="ts-subtitle">Most-Used PK Forwards (4v5)</div>
       ${pkUnitListHTML(pk.units.forwards)}
       <div class="ts-subtitle">Most-Used PK Defense (4v5)</div>
@@ -9918,7 +9938,7 @@ function ppReportBoxHTML(name, label, pp) {
   const ze = pp.zoneEntryOffense;
   return `
     <div class="h2h-overview">
-      <div class="h2h-overview-title">${name} — PP Report (${label})</div>
+      <div class="h2h-overview-title ${h2hTitleClass(label)}">${name} — PP Report (${label})</div>
       <div class="ts-subtitle">Top PP Units (5v4, F then D)</div>
       ${ppUnitListHTML(pp.units)}
       <div class="ts-subtitle">Faceoffs on the Power Play</div>
@@ -10031,21 +10051,21 @@ function ppVisualsPanelHTML(name) {
   return `
     <div class="h2h-overview-wrapper" style="margin-top:0;">
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — PP Entry Spots (Season)</div>
+        <div class="h2h-overview-title title-season">${name} — PP Entry Spots (Season)</div>
         <canvas id="pp-entry-heatmap-season" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — PP Entry Spots (Last 5 GP)</div>
+        <div class="h2h-overview-title title-last5">${name} — PP Entry Spots (Last 5 GP)</div>
         <canvas id="pp-entry-heatmap-last5" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
     </div>
     <div class="h2h-overview-wrapper" style="margin-top:0.75rem;">
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — Shot Attempts on PP Heat Map (Season)</div>
+        <div class="h2h-overview-title title-season">${name} — Shot Attempts on PP Heat Map (Season)</div>
         <canvas id="pp-shot-heatmap-season" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
       <div class="h2h-overview">
-        <div class="h2h-overview-title">${name} — Shot Attempts on PP Heat Map (Last 5 GP)</div>
+        <div class="h2h-overview-title title-last5">${name} — Shot Attempts on PP Heat Map (Last 5 GP)</div>
         <canvas id="pp-shot-heatmap-last5" style="width:100%;height:auto;border-radius:6px;"></canvas>
       </div>
     </div>`;
@@ -10952,7 +10972,7 @@ function renderH2H() {
     function vcChancePanel(title, rowsHtml) {
       return `
         <div class="h2h-overview" style="margin-top:0.75rem;">
-          <div class="h2h-overview-title">${title}</div>
+          <div class="h2h-overview-title ${h2hTitleClass(title)}">${title}</div>
           <div class="h2h-overview-grid" style="grid-template-columns:minmax(0,1fr) 110px 110px 110px;">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-b">For</div>
@@ -10997,7 +11017,7 @@ function renderH2H() {
     function vcChancePanelB(title, rowsHtml) {
       return `
         <div class="h2h-overview" style="margin-top:0.75rem;">
-          <div class="h2h-overview-title">${title}</div>
+          <div class="h2h-overview-title ${h2hTitleClass(title)}">${title}</div>
           <div class="h2h-overview-grid" style="grid-template-columns:minmax(0,1fr) minmax(130px,1.3fr) minmax(75px,1fr) minmax(75px,1fr) minmax(75px,1fr);">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-b" style="font-size:0.64rem;white-space:nowrap;">${teamA} vs ${teamB} (${teamA} Rank)</div>
@@ -11011,7 +11031,7 @@ function renderH2H() {
     function vcTeamStatsPanelB(title, rowsHtml) {
       return `
         <div class="h2h-overview" style="margin-top:0.75rem;">
-          <div class="h2h-overview-title">${title}</div>
+          <div class="h2h-overview-title ${h2hTitleClass(title)}">${title}</div>
           <div class="h2h-overview-grid" style="grid-template-columns:minmax(0,1fr) minmax(170px,1.6fr) minmax(70px,1fr) 14px minmax(70px,1fr);">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-b" style="font-size:0.64rem;white-space:nowrap;">${teamA} vs ${teamB} (${teamA} Rank)</div>
@@ -11130,7 +11150,7 @@ function renderH2H() {
     // ── Panel builder ──
     function ezPanel(title, headerA, headerB, rowsHtml, cols='180px 1fr 1fr'){
       return `<div class="h2h-overview" style="margin-bottom:0.75rem;">
-        <div class="h2h-overview-title">${title}</div>
+        <div class="h2h-overview-title ${h2hTitleClass(title)}">${title}</div>
         <div class="h2h-overview-grid" style="grid-template-columns:${cols};">
           <div class="h2h-ov-header">Stat</div>
           <div class="h2h-ov-header team-a">${headerA}</div>
@@ -11377,7 +11397,7 @@ function renderH2H() {
 
           <div style="display:flex;flex-direction:column;gap:1rem;">
             <div class="h2h-overview">
-              <div class="h2h-overview-title">LAST 5 GAMES</div>
+              <div class="h2h-overview-title title-last5">LAST 5 GAMES</div>
               <div class="h2h-overview-grid" style="grid-template-columns:180px 1fr 1fr;">
                 <div class="h2h-ov-header">Stat</div>
                 <div class="h2h-ov-header team-b" style="grid-column:2/4;">Value</div>
@@ -11425,7 +11445,7 @@ function renderH2H() {
       <div class="vc-layout">
         <div class="vc-stat-col">
           <div class="h2h-overview">
-            <div class="h2h-overview-title">FULL SEASON</div>
+            <div class="h2h-overview-title title-season">FULL SEASON</div>
             <div class="h2h-overview-grid">
               <div class="h2h-ov-header">Stat</div>
               <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -11445,7 +11465,7 @@ function renderH2H() {
               vcRow('ES Dump-in Rec%',       sv?(sv.esDumpInPct).toFixed(1)+'%':'—', vcRnk(vcSRankDumpInPct,teamB), sv?(sv.esDumpInPctA).toFixed(1)+'%':'—', vcRnk(vcSRankDumpInPctA,teamB), true),
             ].join('');
             return `<div class="h2h-overview" style="margin-top:0.75rem;">
-              <div class="h2h-overview-title">TEAM STATS &#8212; ${nameB.toUpperCase()} (SEASON)</div>
+              <div class="h2h-overview-title title-season">TEAM STATS &#8212; ${nameB.toUpperCase()} (SEASON)</div>
               <div class="h2h-overview-grid" style="grid-template-columns:minmax(0,1fr) 110px 110px 110px;">
                 <div class="h2h-ov-header">Stat</div>
                 <div class="h2h-ov-header team-b">For</div>
@@ -11458,7 +11478,7 @@ function renderH2H() {
         </div>
         <div class="vc-stat-col">
           <div class="h2h-overview">
-            <div class="h2h-overview-title">LAST 5 GAMES</div>
+            <div class="h2h-overview-title title-last5">LAST 5 GAMES</div>
             <div class="h2h-overview-grid">
               <div class="h2h-ov-header">Stat</div>
               <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -11478,7 +11498,7 @@ function renderH2H() {
               vcRow('ES Dump-in Rec%',       l5v?(l5v.esDumpInPct).toFixed(1)+'%':'—',          vcRnk(l5RankDumpInPct,teamB), l5v?(l5v.esDumpInPctA).toFixed(1)+'%':'—', vcRnk(l5RankDumpInPctA,teamB), true),
             ].join('');
             return `<div class="h2h-overview" style="margin-top:0.75rem;">
-              <div class="h2h-overview-title">TEAM STATS &#8212; ${nameB.toUpperCase()} (LAST 5)</div>
+              <div class="h2h-overview-title title-last5">TEAM STATS &#8212; ${nameB.toUpperCase()} (LAST 5)</div>
               <div class="h2h-overview-grid" style="grid-template-columns:minmax(0,1fr) 110px 110px 110px;">
                 <div class="h2h-ov-header">Stat</div>
                 <div class="h2h-ov-header team-b">For</div>
@@ -11695,7 +11715,7 @@ function renderH2H() {
       <!-- Season Overview + Last 5 side by side — TOP ROW (same shared panels as Babcock/Segall) -->
       <div class="h2h-overview-wrapper">
         <div class="h2h-overview">
-          <div class="h2h-overview-title">FULL SEASON</div>
+          <div class="h2h-overview-title title-season">FULL SEASON</div>
           <div class="h2h-overview-grid">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -11704,7 +11724,7 @@ function renderH2H() {
           </div>
         </div>
         <div class="h2h-overview">
-          <div class="h2h-overview-title">LAST 5 GAMES</div>
+          <div class="h2h-overview-title title-last5">LAST 5 GAMES</div>
           <div class="h2h-overview-grid">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -11983,7 +12003,7 @@ function renderH2H() {
       <!-- Season Overview + Last 5 side by side — TOP ROW (same shared panels as Babcock/Segall) -->
       <div class="h2h-overview-wrapper">
         <div class="h2h-overview">
-          <div class="h2h-overview-title">FULL SEASON</div>
+          <div class="h2h-overview-title title-season">FULL SEASON</div>
           <div class="h2h-overview-grid">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -11992,7 +12012,7 @@ function renderH2H() {
           </div>
         </div>
         <div class="h2h-overview">
-          <div class="h2h-overview-title">LAST 5 GAMES</div>
+          <div class="h2h-overview-title title-last5">LAST 5 GAMES</div>
           <div class="h2h-overview-grid">
             <div class="h2h-ov-header">Stat</div>
             <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -12104,7 +12124,7 @@ function renderH2H() {
     <!-- Season Overview + Last 5 side by side — TOP ROW -->
     <div class="h2h-overview-wrapper">
       <div class="h2h-overview">
-        <div class="h2h-overview-title">FULL SEASON</div>
+        <div class="h2h-overview-title title-season">FULL SEASON</div>
         <div class="h2h-overview-grid">
           <div class="h2h-ov-header">Stat</div>
           <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
@@ -12113,7 +12133,7 @@ function renderH2H() {
         </div>
       </div>
       <div class="h2h-overview">
-        <div class="h2h-overview-title">LAST 5 GAMES</div>
+        <div class="h2h-overview-title title-last5">LAST 5 GAMES</div>
         <div class="h2h-overview-grid">
           <div class="h2h-ov-header">Stat</div>
           <div class="h2h-ov-header team-a">${fmtTeamHeader(nameA)}</div>
