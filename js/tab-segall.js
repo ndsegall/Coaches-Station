@@ -7,13 +7,14 @@
 //   container : the #h2h-content element
 //   ctx       : the object returned by buildH2HContext() -- this tab uses
 //               36 of its values
-//   teamB     : the opponent abbreviation
+//   opts      : {teamB}
 //
 // Verified to render byte-identical HTML to the inline version.
 // ===========================================================================
 const SegallTab = (function () {
-  function mount(container, ctx, teamB) {
+  function mount(container, ctx, opts) {
     const content = container;
+    const {teamB} = opts;
     const {fmtTeamHeader, h2hGameRowsHtml, l5RankDumpInPct, l5RankDumpInPctA, l5RankLprPct, l5RankOmr, l5RankOmrA, l5RankOzPoss, l5RankOzPossA, l5RankScreened, l5RankScreenedA, l5RankShotAtt, l5RankShotAttA, l5RowsHtml, l5gp, l5v, nameA, nameB, ovRowsHtml, sv, vcChancePanel, vcL5ChanceRows, vcRnk, vcRow, vcSRankDumpInPct, vcSRankDumpInPctA, vcSRankLprPct, vcSRankOMR, vcSRankOMRA, vcSRankOzPoss, vcSRankOzPossA, vcSRankScreened, vcSRankScreenedA, vcSRankShotAtt, vcSRankShotAttA, vcSeasonChanceRows} = ctx;
 
     content.innerHTML=`
