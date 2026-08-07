@@ -480,7 +480,7 @@ const FaceoffTab = (function () {
 
     <div class="panel" style="margin-bottom:20px;">
       <div class="panel-label">Head-to-Head Grid</div>
-      <div class="panel-sub">Our centres down the side, theirs across the top. Each cell is our centre's
+      <div class="panel-sub">Our centers down the side, theirs across the top. Each cell is our center's
       record in draws they have actually taken against each other, shaded blue where we win more than this
       grid's average. Cells in <span class="mx-est">grey italics</span> have no shared history — those are a
       hand-matchup estimate, not a record.</div>
@@ -491,7 +491,7 @@ const FaceoffTab = (function () {
 
     <div class="panel">
       <div class="panel-label">Deployment Notes</div>
-      <div class="panel-sub">For each of their centres, our best options. Every line states the basis and the
+      <div class="panel-sub">For each of their centers, our best options. Every line states the basis and the
       sample behind it — a recommendation resting on eight draws is labelled as such, and nothing here is a
       prediction.</div>
       <div id="mxRecs"></div>
@@ -641,13 +641,13 @@ const FaceoffTab = (function () {
           <div class="key-term"><span class="key-symbol">Hand</span>shooting hand</div>
           <div class="key-desc">Taken from the NHL API when the roster fetch runs. Otherwise
           <strong>derived from the data itself</strong>: every faceoff row carries a flag describing the
-          <em>opposing</em> centre's hand, so the paired row reveals each player's own hand. Resolved by
+          <em>opposing</em> center's hand, so the paired row reveals each player's own hand. Resolved by
           majority vote across all their draws — validated against eight known players at 8/8.</div>
         </div>
         <div class="key-item">
           <div class="key-term"><span class="key-symbol">vs L / vs R</span>hand matchup splits</div>
-          <div class="key-desc">Win rate against left- and right-handed opposing centres. The most
-          actionable single number here — a centre can be twenty points better against one hand.</div>
+          <div class="key-desc">Win rate against left- and right-handed opposing centers. The most
+          actionable single number here — a center can be twenty points better against one hand.</div>
         </div>
         <div class="key-item">
           <div class="key-term"><span class="key-symbol">PP / PK</span>manpower splits</div>
@@ -775,7 +775,7 @@ const DOTS = {
   'dz-west':     {cx:307.5,  cy:620.6, r:112, co:150, row:'bot', label:'DZ'},
   'nz-def-west': {cx:773.2,  cy:200.2, r:92,  co:128, row:'top', label:'NZ own end'},
   'nz-def-east': {cx:773.2,  cy:620.6, r:92,  co:128, row:'bot', label:'NZ own end'},
-  'nz-center':   {cx:959.1,  cy:410.4, r:112, co:172, row:'top', label:'Centre'},
+  'nz-center':   {cx:959.1,  cy:410.4, r:112, co:172, row:'top', label:'Center'},
   'nz-off-west': {cx:1145.6, cy:200.2, r:92,  co:128, row:'top', label:'NZ attack end'},
   'nz-off-east': {cx:1145.6, cy:620.7, r:92,  co:128, row:'bot', label:'NZ attack end'},
   'oz-west':     {cx:1611.0, cy:200.2, r:112, co:150, row:'top', label:'OZ'},
@@ -955,7 +955,7 @@ function renderStats(){
     {l:'Win Rate', v:a.draws?fmtPct(a.winPct):'—', s:'rank among 100+ draw players', chip:chip},
     {l:'vs L / vs R', v:(pctOf(p[sit].vsL)!==null?Math.round(100*pctOf(p[sit].vsL))+'%':'—')+' / '+
                         (pctOf(p[sit].vsR)!==null?Math.round(100*pctOf(p[sit].vsR))+'%':'—'),
-     s:'opposing centre hand'},
+     s:'opposing center hand'},
     {l:'Strongest Dot', v:ex.best?Math.round(ex.best.pct*100)+'%':'—', s:ex.best?ex.best.label+' · '+ex.best.n+' draws':'needs 15+ draws'},
     {l:'Direction Resolved', v:a.wins?Math.round(100*a.resolved/a.wins)+'%':'—',
      s:a.hiddenFwd?a.hiddenFwd+' forward wins hidden':'no forward wins'}
@@ -1060,7 +1060,7 @@ function renderScout(){
   };
   const cards = [
     {l:'Games in Sample', v:t.games||0, s:t.fullSeason?'full season':'partial — opponent games only'},
-    {l:'Team ES Win %', v:fmtPct(agg('ES')), s:'all centres combined'},
+    {l:'Team ES Win %', v:fmtPct(agg('ES')), s:'all centers combined'},
     {l:'Own-End (DZ)', v:fmtPct(zone('dz')), s:'even strength'},
     {l:'Attack-End (OZ)', v:fmtPct(zone('oz')), s:'even strength'},
     {l:'Powerplay', v:fmtPct(mp('PP')), s:'faceoffs on the PP'},
@@ -1186,7 +1186,7 @@ function renderMatchup(){
   /* ---- grid ---- */
   const tbl = document.getElementById('mxTable');
   if(us === them || !ours.length || !theirs.length){
-    tbl.innerHTML = '<tbody><tr><td style="color:var(--text3)">Not enough qualifying centres to build a grid '+
+    tbl.innerHTML = '<tbody><tr><td style="color:var(--text3)">Not enough qualifying centers to build a grid '+
                     'at this minimum.</td></tr></tbody>';
     document.getElementById('mxRecs').innerHTML =
       '<div style="color:var(--text3);font-size:0.8rem;">No matchups to show.</div>';
@@ -1198,7 +1198,7 @@ function renderMatchup(){
     if(h && h.draws > 0) realPcts.push(h.pct);
   }));
 
-  let head = '<thead><tr><th>Our centre</th>';
+  let head = '<thead><tr><th>Our center</th>';
   theirs.forEach(x => {
     const p = DATA[x];
     head += '<th class="mx-rot">'+p.name.split(' ').slice(-1)[0]+' ('+(p.hand||'?')+')</th>';
@@ -1239,7 +1239,7 @@ function renderMatchup(){
       if(est){
         const extra = (h && h.draws>0) ? ' · only '+h.draws+' shared draw'+(h.draws===1?'':'s') : '';
         return {pid:o, pct:est.pct, basis:'hand estimate',
-                detail:'vs '+(xp.hand||'?')+'-handed centres, '+est.n+' draws'+extra};
+                detail:'vs '+(xp.hand||'?')+'-handed centers, '+est.n+' draws'+extra};
       }
       return null;
     }).filter(Boolean).sort((a,b)=>b.pct-a.pct);
@@ -1266,7 +1266,7 @@ function renderMatchup(){
     return html+'</div>';
   }).join('');
   document.getElementById('mxRecs').innerHTML = recs ||
-    '<div style="color:var(--text3);font-size:0.8rem;">No qualifying opposing centres.</div>';
+    '<div style="color:var(--text3);font-size:0.8rem;">No qualifying opposing centers.</div>';
 }
 
 /* ==========================================================================
