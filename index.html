@@ -10831,7 +10831,7 @@ function fmtEsXgPct(pct) {
 }
 function esXgPctCell(pct) {
   const s = esXgPctStyle(pct);
-  return `<span style="text-align:center;font-weight:600;font-size:0.72rem;border-radius:4px;padding:1px 4px;background:${s.bg};color:${s.fg};">${fmtEsXgPct(pct)}</span>`;
+  return `<span style="justify-self:center;text-align:center;font-weight:600;font-size:0.72rem;border-radius:4px;padding:1px 4px;background:${s.bg};color:${s.fg};">${fmtEsXgPct(pct)}</span>`;
 }
 
 function renderLineupSide(data, rosterMap, accentColor) {
@@ -10845,16 +10845,23 @@ function renderLineupSide(data, rosterMap, accentColor) {
   const lineHeader = (data.forwardLines || []).length
     ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES xG%</div>`
     : '';
-  // The xG% badge sits right inside the RW cell (not as its own trailing
-  // grid column) — a separate column after a 1fr-wide RW track just
-  // leaves the badge stranded in that column's trailing whitespace, far
-  // from the actual name it describes.
+  // Fixed-width name columns (not 1fr) plus a fixed spacer column before
+  // the badge — every row shares the exact same track widths, so the
+  // badge lands at the same x position in every line regardless of how
+  // long that row's own RW name happens to be. A 1fr RW column looks
+  // fine on its own, but its width (and therefore how much trailing
+  // slack sits before a following column) is content-independent only
+  // in aggregate across a row's own tracks — it still leaves each row's
+  // badge sitting at a different offset from ITS OWN name, which reads
+  // as misaligned even though the column edges line up.
   const lineRows = (data.forwardLines || []).map(line => {
     const [lw, rw] = orderWings(line.wings, rosterMap || {});
-    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    return `<div style="display:grid;grid-template-columns:130px 130px 130px 14px 40px;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(lw)}</span>
       <span style="text-align:center;">${fmtPlayerLabel(line.center)}</span>
-      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(rw)}<span style="flex:0.33 1 0;"></span>${esXgPctCell(line.esXgPct)}<span style="flex:0.67 1 0;"></span></span>
+      <span>${fmtPlayerLabel(rw)}</span>
+      <span></span>
+      ${esXgPctCell(line.esXgPct)}
     </div>`;
   }).join('');
 
@@ -10888,9 +10895,12 @@ function renderLineupSide(data, rosterMap, accentColor) {
     ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES xG%</div>`
     : '';
   const pairRows = (data.dPairs || []).map(pair => `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    <div style="display:grid;grid-template-columns:130px 32px 130px 4px 40px;gap:8px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(pair.LD)}</span>
-      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(pair.RD)}<span style="flex:0.33 1 0;"></span>${esXgPctCell(pair.esXgPct)}<span style="flex:0.67 1 0;"></span></span>
+      <span></span>
+      <span>${fmtPlayerLabel(pair.RD)}</span>
+      <span></span>
+      ${esXgPctCell(pair.esXgPct)}
     </div>`).join('');
 
   // A 7th (or beyond) defenseman on an irregular-roster night — someone
