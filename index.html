@@ -3192,7 +3192,14 @@ function gcNameToAbbr(fullName) {
 // it — this is purely additive: if the API isn't running, the sync
 // attempt below just fails quietly and everything else keeps working
 // exactly as it always has.
-const GC_API_BASE = 'https://coaches-station-api.fly.dev';
+// Defaults to production for everyone, exactly as before -- this only
+// changes behavior if someone explicitly adds ?api=local to the URL,
+// which is how a local backend (see Coaches Station API's README on
+// running api.py locally for development) gets used instead. Nothing
+// here affects the normal local-preview-against-production workflow.
+const GC_API_BASE = (new URLSearchParams(location.search).get('api') === 'local')
+  ? 'http://localhost:8000'
+  : 'https://coaches-station-api.fly.dev';
 
 // Login state — held in memory for this browser session and cleared
 // automatically on page reload, UNLESS the person checked "Remember me"
