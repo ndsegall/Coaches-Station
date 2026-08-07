@@ -2162,30 +2162,41 @@ def _parse_save_shots_against(s) -> tuple[int, int]:
         return 0, 0
 
 
-async def _find_next_edm_game(client: httpx.AsyncClient) -> dict | None:
+async def _find_next_n_edm_games(client: httpx.AsyncClient, n: int = 1) -> list[dict]:
+    """The next N upcoming EDM games (regular season + playoffs, preseason
+    excluded), earliest first. Same single NHL API call regardless of N —
+    this is the schedule-only lookup, not the heavy per-opponent stats
+    build (see _build_prep_payload for that)."""
     season = _nhl_schedule_season_str()
     r = await client.get(f"{NHL_API_BASE}/club-schedule-season/EDM/{season}")
     r.raise_for_status()
     games = r.json().get("games", [])
     reg_and_po = [g for g in games if g.get("gameType") != 1]  # exclude preseason only
     upcoming = sorted((g for g in reg_and_po if g.get("gameState") == "FUT"), key=lambda g: g["gameDate"])
-    if not upcoming:
-        return None
-    target = upcoming[0]
-    is_home = target["homeTeam"]["abbrev"] == "EDM"
-    opponent = target["awayTeam"]["abbrev"] if is_home else target["homeTeam"]["abbrev"]
     all_sorted = sorted(reg_and_po, key=lambda g: g["gameDate"])
-    game_number = next((i + 1 for i, g in enumerate(all_sorted) if g["id"] == target["id"]), None)
-    return {
-        "gameId": target["id"],
-        "gameDate": target["gameDate"],
-        "startTimeUTC": target.get("startTimeUTC"),
-        "opponent": opponent,
-        "isHome": is_home,
-        "season": season,
-        "gameNumber": game_number,
-        "totalGames": len(all_sorted),
-    }
+    game_number_by_id = {g["id"]: i + 1 for i, g in enumerate(all_sorted)}
+    total_games = len(all_sorted)
+
+    result = []
+    for target in upcoming[:n]:
+        is_home = target["homeTeam"]["abbrev"] == "EDM"
+        opponent = target["awayTeam"]["abbrev"] if is_home else target["homeTeam"]["abbrev"]
+        result.append({
+            "gameId": target["id"],
+            "gameDate": target["gameDate"],
+            "startTimeUTC": target.get("startTimeUTC"),
+            "opponent": opponent,
+            "isHome": is_home,
+            "season": season,
+            "gameNumber": game_number_by_id.get(target["id"]),
+            "totalGames": total_games,
+        })
+    return result
+
+
+async def _find_next_edm_game(client: httpx.AsyncClient) -> dict | None:
+    games = await _find_next_n_edm_games(client, n=1)
+    return games[0] if games else None
 
 
 async def _fetch_jersey_map(client: httpx.AsyncClient, team_abbr: str, season: str | None = None) -> dict:
@@ -2516,9 +2527,10 @@ def _prev_season_str(season: str) -> str:
     return f"{start - 1}{start}"
 
 
-async def _build_prep_payload() -> dict:
+async def _build_prep_payload(next_game: dict | None = None) -> dict:
     async with httpx.AsyncClient(timeout=15.0) as client:
-        next_game = await _find_next_edm_game(client)
+        if next_game is None:
+            next_game = await _find_next_edm_game(client)
         if not next_game:
             return {"opponent": None, "computedAt": dt.datetime.now(dt.timezone.utc).isoformat()}
 
@@ -2600,12 +2612,61 @@ async def _build_prep_payload() -> dict:
 _prep_cache: dict = {}
 _prep_lock = asyncio.Lock()
 
+# Multi-game Pre-Scout Prep support: the game picker (next PREP_UPCOMING_COUNT
+# EDM games) needs a lightweight schedule-only list instantly, plus the full
+# season/last5/pk/pp payload for whichever specific game a coach clicks into.
+# _prep_cache above is kept exactly as before (always mirrors game #1, i.e.
+# the literal next game) so /api/prep/next-game needs zero changes and stays
+# backward compatible. Games 2-N build lazily on first request rather than
+# unconditionally every background cycle — nobody's paying for ~15 NHL API
+# calls per game, every 10 minutes, for games a coach never opens — but once
+# a game HAS been opened once, it's added to _prep_warm_game_ids and the
+# background loop keeps it warm from then on, same "instant on repeat visits"
+# guarantee the single-game version always had.
+PREP_UPCOMING_COUNT = 5
+_prep_upcoming: list = []          # schedule-only list, next PREP_UPCOMING_COUNT games
+_prep_cache_by_game: dict = {}     # gameId -> full payload
+_prep_warm_game_ids: set = set()   # games 2-N that have been requested at least once
+
 
 async def _refresh_prep_cache():
-    global _prep_cache
+    global _prep_cache, _prep_upcoming
     async with _prep_lock:
         try:
-            _prep_cache = await _build_prep_payload()
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                games = await _find_next_n_edm_games(client, n=PREP_UPCOMING_COUNT)
+            _prep_upcoming = games
+            if not games:
+                _prep_cache = {"opponent": None, "computedAt": dt.datetime.now(dt.timezone.utc).isoformat()}
+                _prep_cache_by_game.clear()
+                _prep_warm_game_ids.clear()
+                return
+
+            # Always rebuild game #1 (unchanged original behavior), plus
+            # any of games 2-N that's actually been opened before.
+            to_build = [games[0]] + [g for g in games[1:] if g["gameId"] in _prep_warm_game_ids]
+
+            async def build_one(g):
+                try:
+                    return g["gameId"], await _build_prep_payload(g)
+                except Exception as e:
+                    print(f"[prep-cache] game {g['gameId']} ({g['opponent']}) refresh failed: {e}")
+                    return g["gameId"], None
+
+            results = await asyncio.gather(*(build_one(g) for g in to_build))
+            for gid, payload in results:
+                if payload is not None:
+                    _prep_cache_by_game[gid] = payload
+
+            # Drop anything that's rolled out of the upcoming-N window
+            # entirely (game played, or bumped out by a schedule change).
+            live_ids = {g["gameId"] for g in games}
+            for gid in list(_prep_cache_by_game.keys()):
+                if gid not in live_ids:
+                    _prep_cache_by_game.pop(gid, None)
+                    _prep_warm_game_ids.discard(gid)
+
+            _prep_cache = _prep_cache_by_game.get(games[0]["gameId"]) or _prep_cache
         except Exception as e:
             print(f"[prep-cache] refresh failed: {e}")
 
@@ -2669,6 +2730,45 @@ async def prep_next_game(user: CurrentUser = Depends(require_login)):
     asyncio.create_task(check_and_refresh())
 
     return _prep_cache
+
+
+@app.get("/api/prep/upcoming-games")
+async def prep_upcoming_games(user: CurrentUser = Depends(require_login)):
+    """Schedule-only list of EDM's next PREP_UPCOMING_COUNT games — just
+    enough to render the game-picker boxes instantly (gameId, date,
+    opponent, home/away, real season game number). Deliberately doesn't
+    wait on any of the heavier per-opponent stats (see /api/prep/game/{id}
+    for those), so this is fast even on a completely cold cache: worst
+    case it's the one schedule call _find_next_n_edm_games always needs,
+    not a ~15-call-per-game stats build."""
+    if _prep_upcoming:
+        return {"games": _prep_upcoming}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        games = await _find_next_n_edm_games(client, n=PREP_UPCOMING_COUNT)
+    return {"games": games}
+
+
+@app.get("/api/prep/game/{game_id}")
+async def prep_game(game_id: int, user: CurrentUser = Depends(require_login)):
+    """Full Pre-Scout Prep payload (same shape as /api/prep/next-game) for
+    one specific game out of the current picker list, addressed by its
+    NHL gameId. Instant once warmed; the first time a given game is opened
+    it triggers a live rebuild (same cold-start tradeoff /api/prep/next-game
+    has always had) and from then on the background loop keeps it warm
+    alongside game #1."""
+    cached = _prep_cache_by_game.get(game_id)
+    if cached:
+        _prep_warm_game_ids.add(game_id)
+        return cached
+
+    match = next((g for g in _prep_upcoming if g["gameId"] == game_id), None)
+    if not match:
+        raise HTTPException(404, f"Game {game_id} isn't one of the currently listed upcoming games — refresh the game list and try again.")
+
+    payload = await _build_prep_payload(match)
+    _prep_cache_by_game[game_id] = payload
+    _prep_warm_game_ids.add(game_id)
+    return payload
 
 
 # ── Scoring chances ──────────────────────────────────────────────────────

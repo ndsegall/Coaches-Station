@@ -13275,6 +13275,14 @@ document.addEventListener('keydown', e => {
     }
   }
 
+  // The internal role value 'video-coach' (used everywhere else in the
+  // app -- data-role attributes, the role dispatch, account defaults) is
+  // deliberately not renamed; that would mean touching every place it's
+  // referenced. Instead just remap it for the URL specifically, so links
+  // read '&role=segall' rather than the internal '&role=video-coach'.
+  const ROLE_TO_URL = { 'video-coach': 'segall', 'head-coach': 'babcock' };
+  const ROLE_FROM_URL = Object.fromEntries(Object.entries(ROLE_TO_URL).map(([k, v]) => [v, k]));
+
   // Captures the one bit of "what's open" state that isn't visible as a
   // DOM class: which two teams the nested playoff-series modal was opened
   // for (openPoSeriesModal takes them as plain function args). Wrapping
@@ -13299,7 +13307,8 @@ document.addEventListener('keydown', e => {
         clickIfAvailable('h2h-btn');
         const role = params.get('role');
         if (role) {
-          document.querySelector(`#h2h-role-buttons .prep-role-btn[data-role="${role}"]`)?.click();
+          const internalRole = ROLE_FROM_URL[role] || role;
+          document.querySelector(`#h2h-role-buttons .prep-role-btn[data-role="${internalRole}"]`)?.click();
         }
         const gameParam = params.get('game');
         if (gameParam) {
@@ -13381,7 +13390,7 @@ document.addEventListener('keydown', e => {
     } else if (isVisible('h2h-overlay')) {
       p.set('o', 'prep');
       const role = document.getElementById('h2h-role-select')?.value;
-      if (role) p.set('role', role);
+      if (role) p.set('role', ROLE_TO_URL[role] || role);
       if (typeof _prepSelectedGameId !== 'undefined' && _prepSelectedGameId != null) {
         p.set('game', String(_prepSelectedGameId));
       }
