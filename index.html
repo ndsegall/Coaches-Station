@@ -10854,7 +10854,7 @@ function renderLineupSide(data, rosterMap, accentColor) {
     return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(lw)}</span>
       <span style="text-align:center;">${fmtPlayerLabel(line.center)}</span>
-      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(rw)}${esXgPctCell(line.esXgPct)}</span>
+      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(rw)}<span style="flex:0.33 1 0;"></span>${esXgPctCell(line.esXgPct)}<span style="flex:0.67 1 0;"></span></span>
     </div>`;
   }).join('');
 
@@ -10890,7 +10890,7 @@ function renderLineupSide(data, rosterMap, accentColor) {
   const pairRows = (data.dPairs || []).map(pair => `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(pair.LD)}</span>
-      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(pair.RD)}${esXgPctCell(pair.esXgPct)}</span>
+      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(pair.RD)}<span style="flex:0.33 1 0;"></span>${esXgPctCell(pair.esXgPct)}<span style="flex:0.67 1 0;"></span></span>
     </div>`).join('');
 
   // A 7th (or beyond) defenseman on an irregular-roster night — someone
