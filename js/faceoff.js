@@ -396,7 +396,7 @@ const FaceoffTab = (function () {
 <header>
   
   <button class="fo-header-btn active" data-tab="matchup">Matchups</button>
-  <button class="fo-header-btn" data-tab="prescout">Their Centres</button>
+  <button class="fo-header-btn" data-tab="prescout">Their Centers</button>
   <button class="fo-header-btn" data-tab="map">Player Map</button>
   <button class="fo-header-btn" data-tab="key">Key</button>
 </header>
@@ -432,10 +432,10 @@ const FaceoffTab = (function () {
     <div class="stat-row" id="scoutStats"></div>
 
     <div class="panel">
-      <div class="panel-label">Centres — Faceoff Profile</div>
+      <div class="panel-label">Centers — Faceoff Profile</div>
       <div class="panel-sub">Click any row to open that player's win-direction map. Win-rate cells shade
       blue when better than this group's average, red when worse. Hand is the player's shooting hand;
-      <strong>vs L</strong> and <strong>vs R</strong> are win rates against left- and right-handed opposing centres.</div>
+      <strong>vs L</strong> and <strong>vs R</strong> are win rates against left- and right-handed opposing centers.</div>
       <div class="schedule-scroll no-cap">
         <table id="scoutTable"></table>
       </div>
