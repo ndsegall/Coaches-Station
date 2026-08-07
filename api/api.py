@@ -559,10 +559,21 @@ def _manpower_combo_xg(conn, game_id: int, team_abbr: str, situation: str):
     every play row already carries its own on-ice snapshot (the same
     teamForwardsOnIceRefs/etc. columns _manpower_combo_seconds reads), so
     a qualifying shot is attributed in a single pass, no interval math
-    needed. Same shot-quality filter as the per-skater ES xG% used
-    elsewhere (_skater_woi_data): exclude blocked shots, evenStrength/
-    period<=3 only applies for situation='5v5' since that's the only
-    caller today."""
+    needed.
+
+    Deliberately NOT the same shot-quality convention as the per-skater
+    ES xG% used elsewhere (_skater_woi_data): this uses
+    expectedGoalsAllShots (not expectedGoalsOnNet) and does NOT exclude
+    blocked shots. expectedGoalsOnNet is null for anything that didn't
+    reach the goalie (a miss or a block), so restricting a per-line/pair
+    metric to it silently drops most attempts for lines with only a
+    handful of shots that game, which swings the percentage hard on
+    small samples. Confirmed by hand against 2025-10-08 EDM @ CGY (game
+    20006): 3 of 4 forward lines matched a known-correct external xG%
+    reading exactly once switched to expectedGoalsAllShots with blocked
+    shots included, versus being off by double digits under the
+    on-net/exclude-blocked convention. period<=3 only applies for
+    situation='5v5' since that's the only caller today."""
     situation_map = {
         "5v5": ("evenStrength", 5, 5),
         "5v4": ("powerPlay", 5, 4),
@@ -577,9 +588,8 @@ def _manpower_combo_xg(conn, game_id: int, team_abbr: str, situation: str):
         "SELECT team, manpowerSituation, teamSkatersOnIce, opposingTeamSkatersOnIce, "
         "teamForwardsOnIceRefs, teamDefencemenOnIceRefs, "
         "opposingTeamForwardsOnIceRefs, opposingTeamDefencemenOnIceRefs, "
-        "expectedGoalsOnNet "
-        "FROM plays WHERE gameReferenceId = ? AND name = 'shot' "
-        "AND type NOT IN ('slotblocked', 'outsideblocked') AND period <= 3",
+        "expectedGoalsAllShots "
+        "FROM plays WHERE gameReferenceId = ? AND name = 'shot' AND period <= 3",
         (game_id,),
     ).fetchall()
 
@@ -611,7 +621,7 @@ def _manpower_combo_xg(conn, game_id: int, team_abbr: str, situation: str):
         if r["manpowerSituation"] != manpower:
             continue
         team = r["team"]
-        xg = r["expectedGoalsOnNet"] or 0.0
+        xg = r["expectedGoalsAllShots"] or 0.0
         if team == team_full:
             fwd, dmen = _clean_refs(r["teamForwardsOnIceRefs"]), _clean_refs(r["teamDefencemenOnIceRefs"])
             skaters, opp = r["teamSkatersOnIce"], r["opposingTeamSkatersOnIce"]

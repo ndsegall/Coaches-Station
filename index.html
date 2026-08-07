@@ -10843,17 +10843,18 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // piecemeal per row — the team-name header and the whole lineup share
   // one font color, per request.
   const lineHeader = (data.forwardLines || []).length
-    ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 44px;gap:6px;padding:0 0 1px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);">
-        <span></span><span></span><span></span><span style="text-align:center;">ES xG%</span>
-      </div>`
+    ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES xG%</div>`
     : '';
+  // The xG% badge sits right inside the RW cell (not as its own trailing
+  // grid column) — a separate column after a 1fr-wide RW track just
+  // leaves the badge stranded in that column's trailing whitespace, far
+  // from the actual name it describes.
   const lineRows = (data.forwardLines || []).map(line => {
     const [lw, rw] = orderWings(line.wings, rosterMap || {});
-    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 44px;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(lw)}</span>
       <span style="text-align:center;">${fmtPlayerLabel(line.center)}</span>
-      <span>${fmtPlayerLabel(rw)}</span>
-      ${esXgPctCell(line.esXgPct)}
+      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(rw)}${esXgPctCell(line.esXgPct)}</span>
     </div>`;
   }).join('');
 
@@ -10884,15 +10885,12 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // columns reads fine for a full line, but two names crammed close
   // together read as one run-on name, so this pair needs more air.
   const pairHeader = (data.dPairs || []).length
-    ? `<div style="display:grid;grid-template-columns:1fr 1fr 44px;gap:48px;padding:0 0 1px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);">
-        <span></span><span></span><span style="text-align:center;">ES xG%</span>
-      </div>`
+    ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES xG%</div>`
     : '';
   const pairRows = (data.dPairs || []).map(pair => `
-    <div style="display:grid;grid-template-columns:1fr 1fr 44px;gap:48px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(pair.LD)}</span>
-      <span>${fmtPlayerLabel(pair.RD)}</span>
-      ${esXgPctCell(pair.esXgPct)}
+      <span style="display:flex;align-items:center;gap:6px;">${fmtPlayerLabel(pair.RD)}${esXgPctCell(pair.esXgPct)}</span>
     </div>`).join('');
 
   // A 7th (or beyond) defenseman on an irregular-roster night — someone
