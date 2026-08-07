@@ -293,7 +293,6 @@ const FaceoffTab = (function () {
 #fo-root .wedge { cursor:pointer; transition:opacity .12s; }
 #fo-root .wedge:hover { opacity:.72; }
 #fo-root .dot-hit { cursor:pointer; fill:transparent; }
-#fo-root .dot-hit:hover { stroke:var(--oilers-orange); stroke-width:2.5; }
 #fo-root text.dot-name {
   font-family:'Rubik',sans-serif; font-size:22px; font-weight:500;
   fill:var(--text3); text-transform:uppercase; letter-spacing:0.06em;
