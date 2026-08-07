@@ -549,6 +549,102 @@ def _manpower_combo_seconds(conn, game_id: int, team_abbr: str, situation: str):
     return fwd_time, dmen_time
 
 
+def _manpower_combo_xg(conn, game_id: int, team_abbr: str, situation: str):
+    """Sibling to _manpower_combo_seconds: instead of cumulative icetime,
+    accumulates on-ice xGF/xGA per exact forward/D combo for a game, keyed
+    the same way (tuple of sorted player-ref strings) so a line/pair's
+    displayed roster and its measured xG% can never drift apart.
+
+    Unlike the icetime walk, this doesn't need consecutive-row diffing:
+    every play row already carries its own on-ice snapshot (the same
+    teamForwardsOnIceRefs/etc. columns _manpower_combo_seconds reads), so
+    a qualifying shot is attributed in a single pass, no interval math
+    needed. Same shot-quality filter as the per-skater ES xG% used
+    elsewhere (_skater_woi_data): exclude blocked shots, evenStrength/
+    period<=3 only applies for situation='5v5' since that's the only
+    caller today."""
+    situation_map = {
+        "5v5": ("evenStrength", 5, 5),
+        "5v4": ("powerPlay", 5, 4),
+        "4v5": ("shortHanded", 4, 5),
+    }
+    if situation not in situation_map:
+        raise HTTPException(400, f"situation must be one of {list(situation_map)}")
+    manpower, want_skaters, want_opp = situation_map[situation]
+    team_full = full_name(team_abbr)
+
+    rows = conn.execute(
+        "SELECT team, manpowerSituation, teamSkatersOnIce, opposingTeamSkatersOnIce, "
+        "teamForwardsOnIceRefs, teamDefencemenOnIceRefs, "
+        "opposingTeamForwardsOnIceRefs, opposingTeamDefencemenOnIceRefs, "
+        "expectedGoalsOnNet "
+        "FROM plays WHERE gameReferenceId = ? AND name = 'shot' "
+        "AND type NOT IN ('slotblocked', 'outsideblocked') AND period <= 3",
+        (game_id,),
+    ).fetchall()
+
+    home_away = conn.execute(
+        "SELECT homeTeamAbbrev, awayTeamAbbrev FROM games WHERE gameReferenceId = ?", (game_id,)
+    ).fetchone()
+    if not home_away:
+        raise HTTPException(404, f"Game {game_id} not found in the games table")
+    if not home_away["homeTeamAbbrev"] or not home_away["awayTeamAbbrev"]:
+        raise HTTPException(
+            422,
+            f"Game {game_id} has incomplete team data in the database "
+            f"(homeTeamAbbrev={home_away['homeTeamAbbrev']!r}, awayTeamAbbrev={home_away['awayTeamAbbrev']!r}).",
+        )
+    home_abbr, away_abbr = home_away["homeTeamAbbrev"], home_away["awayTeamAbbrev"]
+    if team_abbr.upper() not in (home_abbr, away_abbr):
+        raise HTTPException(
+            400,
+            f"Team '{team_abbr.upper()}' did not play in game {game_id} "
+            f"(this game was {away_abbr} @ {home_abbr}). Double-check the game ID.",
+        )
+    other_abbr = away_abbr if home_abbr == team_abbr.upper() else home_abbr
+    other_full = full_name(other_abbr)
+
+    fwd_xg = defaultdict(lambda: {"xgf": 0.0, "xga": 0.0})
+    dmen_xg = defaultdict(lambda: {"xgf": 0.0, "xga": 0.0})
+
+    for r in rows:
+        if r["manpowerSituation"] != manpower:
+            continue
+        team = r["team"]
+        xg = r["expectedGoalsOnNet"] or 0.0
+        if team == team_full:
+            fwd, dmen = _clean_refs(r["teamForwardsOnIceRefs"]), _clean_refs(r["teamDefencemenOnIceRefs"])
+            skaters, opp = r["teamSkatersOnIce"], r["opposingTeamSkatersOnIce"]
+            side = "xgf"
+        elif team == other_full:
+            fwd, dmen = _clean_refs(r["opposingTeamForwardsOnIceRefs"]), _clean_refs(r["opposingTeamDefencemenOnIceRefs"])
+            skaters, opp = r["opposingTeamSkatersOnIce"], r["teamSkatersOnIce"]
+            side = "xga"
+        else:
+            continue
+        if skaters != want_skaters or opp != want_opp:
+            continue
+        if len(fwd) == 3:
+            fwd_xg[tuple(sorted(fwd))][side] += xg
+        if len(dmen) == 2:
+            dmen_xg[tuple(sorted(dmen))][side] += xg
+
+    return fwd_xg, dmen_xg
+
+
+def _combo_xg_pct(xg_map, combo):
+    """esXgPct for one specific trio/pair: None (not 0%) when the combo
+    never saw a 5v5 shot at either end, so the frontend can render '—'
+    instead of a misleading percentage built from zero shots."""
+    entry = xg_map.get(tuple(sorted(str(p) for p in combo)))
+    if not entry:
+        return None
+    xgf, xga = entry["xgf"], entry["xga"]
+    if xgf + xga <= 0:
+        return None
+    return round(xgf / (xgf + xga) * 100, 1)
+
+
 def _first_shift_times(conn, game_id: int, team_abbr: str, situation: str):
     """Finds the EARLIEST gameTime each forward/D combo appears together
     on the ice, for a given 5v5/5v4/4v5 situation.
@@ -1660,6 +1756,8 @@ async def game_lineup(game_id: int, team: str = Query(..., description="Team abb
     extra_fwd_ids = data["extra_fwd_ids"]
     pairs = data["pairs"]
     extra_d_ids = data["extra_d_ids"]
+    fwd_xg = data["fwd_xg"]
+    dmen_xg = data["dmen_xg"]
     dpair_sides = data["dpair_sides"]
     starter_id = data["starter_id"]
     backup_id = data["backup_id"]
@@ -1686,6 +1784,7 @@ async def game_lineup(game_id: int, team: str = Query(..., description="Team abb
             "line": i + 1,
             "center": _name(players, int(center_id)) if center_id else None,
             "wings": [_name(players, int(p)) if p is not None else None for p in wings],
+            "esXgPct": _combo_xg_pct(fwd_xg, trio),
         }
 
     def pair_out(sides, i):
@@ -1693,6 +1792,7 @@ async def game_lineup(game_id: int, team: str = Query(..., description="Team abb
             "pair": i + 1,
             "LD": _name(players, int(sides["LD"])) if sides.get("LD") else None,
             "RD": _name(players, int(sides["RD"])) if sides.get("RD") else None,
+            "esXgPct": _combo_xg_pct(dmen_xg, pairs[i]),
         }
 
     def _goalie_from_stats_side(is_starter: bool):
@@ -1804,6 +1904,7 @@ def _build_lineup_sync_data(game_id: int, team_abbr: str) -> dict:
 
         fwd_first, dmen_first = _first_shift_times(conn, game_id, team_abbr, "5v5")
         fwd_total, dmen_total = _manpower_combo_seconds(conn, game_id, team_abbr, "5v5")
+        fwd_xg, dmen_xg = _manpower_combo_xg(conn, game_id, team_abbr, "5v5")
 
         # A combo's first-ever recorded appearance can occasionally be a
         # near-meaningless blip — a brief overlap during a change, or a
@@ -1890,6 +1991,8 @@ def _build_lineup_sync_data(game_id: int, team_abbr: str) -> dict:
             "extra_fwd_ids": extra_fwd_ids,
             "pairs": pairs,
             "extra_d_ids": extra_d_ids,
+            "fwd_xg": fwd_xg,
+            "dmen_xg": dmen_xg,
             "faceoff_counts": faceoff_counts,
             "dpair_sides": dpair_sides,
             "starter_id": starter_id,

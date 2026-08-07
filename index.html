@@ -10807,6 +10807,33 @@ function orderWings(wings, rosterMap) {
   return wings;
 }
 
+// Blue-when-better/red-when-worse shading for a single game's ES on-ice
+// xG%, anchored at the fixed 50% break-even point (not relative to the
+// other lines/pairs shown alongside it — a game only has 3-4 of each,
+// too few to make "better than this game's other lines" a meaningful
+// baseline the way it is for a season-long table). Deviations beyond 25
+// points hit full intensity; within 2 points of 50 reads as a wash and
+// gets no shading at all.
+function esXgPctStyle(pct) {
+  if (pct === null || pct === undefined) return { bg: '', fg: 'var(--text3)' };
+  const dev = pct - 50;
+  if (Math.abs(dev) < 2) return { bg: '', fg: 'var(--text2)' };
+  const intensity = Math.min(Math.abs(dev) / 25, 1);
+  const alpha = (0.10 + intensity * 0.30).toFixed(3);
+  const isGood = dev > 0;
+  return {
+    bg: isGood ? `rgba(10,90,180,${alpha})` : `rgba(192,57,43,${alpha})`,
+    fg: isGood ? 'var(--good-text)' : 'var(--bad-text)',
+  };
+}
+function fmtEsXgPct(pct) {
+  return (pct === null || pct === undefined) ? '—' : Math.round(pct) + '%';
+}
+function esXgPctCell(pct) {
+  const s = esXgPctStyle(pct);
+  return `<span style="text-align:center;font-weight:600;font-size:0.72rem;border-radius:4px;padding:1px 4px;background:${s.bg};color:${s.fg};">${fmtEsXgPct(pct)}</span>`;
+}
+
 function renderLineupSide(data, rosterMap, accentColor) {
   if (!data) {
     return `<div style="color:var(--text3);font-size:0.78rem;padding:0.5rem 0;">Lineup data not available for this game.</div>`;
@@ -10815,12 +10842,18 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // div below (set once, in loadAndRenderLineups) rather than being colored
   // piecemeal per row — the team-name header and the whole lineup share
   // one font color, per request.
+  const lineHeader = (data.forwardLines || []).length
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 44px;gap:6px;padding:0 0 1px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);">
+        <span></span><span></span><span></span><span style="text-align:center;">ES xG%</span>
+      </div>`
+    : '';
   const lineRows = (data.forwardLines || []).map(line => {
     const [lw, rw] = orderWings(line.wings, rosterMap || {});
-    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 44px;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(lw)}</span>
       <span style="text-align:center;">${fmtPlayerLabel(line.center)}</span>
       <span>${fmtPlayerLabel(rw)}</span>
+      ${esXgPctCell(line.esXgPct)}
     </div>`;
   }).join('');
 
@@ -10850,10 +10883,16 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // Wider gap between LD/RD than the forward-line columns — three tight
   // columns reads fine for a full line, but two names crammed close
   // together read as one run-on name, so this pair needs more air.
+  const pairHeader = (data.dPairs || []).length
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr 44px;gap:48px;padding:0 0 1px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);">
+        <span></span><span></span><span style="text-align:center;">ES xG%</span>
+      </div>`
+    : '';
   const pairRows = (data.dPairs || []).map(pair => `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 44px;gap:48px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(pair.LD)}</span>
       <span>${fmtPlayerLabel(pair.RD)}</span>
+      ${esXgPctCell(pair.esXgPct)}
     </div>`).join('');
 
   // A 7th (or beyond) defenseman on an irregular-roster night — someone
@@ -10882,8 +10921,8 @@ function renderLineupSide(data, rosterMap, accentColor) {
   const pkDRows = (data.pkUnits && data.pkUnits.dPairs || []).map(unitRow).join('') || `<div style="font-size:0.72rem;">—</div>`;
 
   return `
-    <div style="margin-bottom:0.6rem;">${lineRows}${extraFRows}</div>
-    <div style="margin-bottom:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">${pairRows}${extraDRows}</div>
+    <div style="margin-bottom:0.6rem;">${lineHeader}${lineRows}${extraFRows}</div>
+    <div style="margin-bottom:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">${pairHeader}${pairRows}${extraDRows}</div>
     <div style="margin-bottom:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">${goalieRows}</div>
     <div style="margin-bottom:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">
       <div style="font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:2px;">PP1</div>
