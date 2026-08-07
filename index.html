@@ -9774,6 +9774,41 @@ async function fetchUpcomingGames(force = false) {
   return _prepUpcomingGames;
 }
 
+// Switching games felt slow even for games whose /api/prep/game/{id}
+// payload was already warm on the backend, because the McFarland/Segall
+// PK & PP visual heatmap panels pull from separate, uncached-until-first-
+// view endpoints (fetchPkVisualsData/fetchPpVisualsData), keyed by
+// opponent+season — a brand-new opponent means 8 fresh network calls the
+// instant that panel renders, regardless of how fast /api/prep/game/{id}
+// itself was. This warms both the per-game payload AND those two visuals
+// caches for every upcoming game in the background, one at a time (not
+// all at once — the payload build alone is ~15 NHL API calls per game
+// server-side, and firing 4 of those concurrently risks hammering the
+// NHL API), so that by the time a coach actually clicks a box, its data
+// — including the heatmaps — is very likely already sitting in cache.
+// This trades a bit of background load right when the picker opens for a
+// snappier click later; deliberate given the actual complaint is switch
+// speed, not idle backend cost.
+async function warmUpcomingGamesCache() {
+  for (const g of _prepUpcomingGames) {
+    if (g.gameId === _prepSelectedGameId) continue; // already loaded
+    try {
+      const r = await apiFetch(`/api/prep/game/${g.gameId}`);
+      if (!r.ok) continue;
+      const data = await r.json();
+      if (!data || !data.opponent) continue;
+      await Promise.all([
+        fetchPkVisualsData(data.opponent, data.statsSeason, (data.last5 || {}).gameDates),
+        fetchPpVisualsData(data.opponent, data.statsSeason, (data.last5 || {}).gameDates),
+      ]);
+    } catch {
+      // Best-effort background warming — a failure here just means that
+      // one game stays cold until actually clicked, same as before this
+      // existed. Not worth surfacing to the coach.
+    }
+  }
+}
+
 // 'Sep. 29, 2026' — same short-month format as formatPrepGameDate but
 // with the period the game-picker boxes use.
 function formatPrepGameDateShort(dateStr) {
@@ -10358,6 +10393,10 @@ document.getElementById('h2h-btn').addEventListener('click', async () => {
   }
   renderPrepHeader();
   renderH2H();
+  // Fire-and-forget: warms the other games' data in the background while
+  // the coach looks at whichever game just loaded, so clicking into them
+  // later is fast instead of triggering a live build/fetch at click time.
+  warmUpcomingGamesCache();
 });
 document.getElementById('h2h-close').addEventListener('click', () => {
   document.getElementById('h2h-overlay').classList.remove('visible');
