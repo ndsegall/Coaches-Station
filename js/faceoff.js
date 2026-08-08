@@ -394,9 +394,9 @@ const FaceoffTab = (function () {
 
 <header>
   
-  <button class="fo-header-btn active" data-tab="matchup">Matchups</button>
   <button class="fo-header-btn" data-tab="prescout">Their Centers</button>
   <button class="fo-header-btn" data-tab="map">Player Map</button>
+  <button class="fo-header-btn active" data-tab="matchup">Matchups</button>
   <button class="fo-header-btn" data-tab="key">Key</button>
 </header>
 
@@ -513,6 +513,14 @@ const FaceoffTab = (function () {
             <button data-sit="PP">PP</button>
             <button data-sit="PK">PK</button>
             <button data-sit="ALL">All</button>
+          </div>
+        </div>
+        <div class="ctl-group">
+          <span class="ctl-label">Opponent Hand</span>
+          <div class="seg" id="handSeg">
+            <button class="active" data-hand="ALL">All Opponents</button>
+            <button data-hand="L">Left-Handed</button>
+            <button data-hand="R">Right-Handed</button>
           </div>
         </div>
         <div class="ctl-group" style="margin-left:auto;">
@@ -799,12 +807,14 @@ function wedgeFill(share){
 /* ==========================================================================
    AGGREGATION
    ========================================================================== */
-function dotsOf(pid, sit){
+function dotsOf(pid, sit, hand){
   const p = DATA[pid];
-  return (p && p[sit] && p[sit].dots) ? p[sit].dots : {};
+  if(!p || !p[sit]) return {};
+  if((hand==='L' || hand==='R') && p[sit].dotsByHand) return p[sit].dotsByHand[hand] || {};
+  return p[sit].dots || {};
 }
-function playerAgg(pid, sit){
-  const dots = dotsOf(pid, sit);
+function playerAgg(pid, sit, hand){
+  const dots = dotsOf(pid, sit, hand);
   let draws=0, wins=0, resolved=0, hiddenFwd=0;
   const byZone = {dz:[0,0], nz:[0,0], oz:[0,0]};
   for(const k of DOT_ORDER){
@@ -818,8 +828,8 @@ function playerAgg(pid, sit){
           winPct: draws ? wins/draws : 0};
 }
 /* strongest / weakest dot with enough volume to mean something */
-function dotExtremes(pid, sit, minDraws){
-  const dots = dotsOf(pid, sit);
+function dotExtremes(pid, sit, minDraws, hand){
+  const dots = dotsOf(pid, sit, hand);
   let best=null, worst=null;
   for(const k of DOT_ORDER){
     const e = dots[k];
@@ -931,6 +941,8 @@ function drawDot(g, key, entry){
    ========================================================================== */
 function curSit(){ return document.querySelector('#sitSeg button.active').dataset.sit; }
 function curPid(){ return document.getElementById('playerSelect').value; }
+function curHand(){ const b = document.querySelector('#handSeg button.active'); return b ? b.dataset.hand : 'ALL'; }
+const HAND_LABEL = {ALL:'all opponents', L:'vs left-handed opponents', R:'vs right-handed opponents'};
 
 function buildLegend(){
   const wedges = WEDGE_TIERS.map(t=>'<span class="fo-legend-item"><span class="sw" style="background:'+t.fill+'"></span>'+t.label+'</span>').join('');
@@ -942,14 +954,15 @@ function buildLegend(){
 }
 
 function renderStats(){
-  const pid = curPid(), sit = curSit(), p = DATA[pid];
-  const a = playerAgg(pid, sit);
-  const field = Object.keys(DATA).map(x=>playerAgg(x,sit)).filter(x=>x.draws>=100).map(x=>x.winPct);
+  const pid = curPid(), sit = curSit(), hand = curHand(), p = DATA[pid];
+  const a = playerAgg(pid, sit, hand);
+  const field = Object.keys(DATA).map(x=>playerAgg(x,sit,hand)).filter(x=>x.draws>=100).map(x=>x.winPct);
   const chip = (a.draws>=100 && field.length>1) ? rankChip(a.winPct, field, false)
                                                 : '<span class="rank-chip">not qualified</span>';
-  const ex = dotExtremes(pid, sit, 15);
+  const ex = dotExtremes(pid, sit, 15, hand);
   const cards = [
-    {l:'Draws', v:a.draws, s:(sit==='ES'?'even strength':'special teams')+' · '+p.team},
+    {l:'Draws', v:a.draws, s:(sit==='ES'?'even strength':'special teams')+' · '+p.team+
+                            (hand!=='ALL'?' · '+HAND_LABEL[hand]:'')},
     {l:'Wins', v:a.wins, s:a.draws?fmtPct(a.winPct)+' win rate':'—'},
     {l:'Win Rate', v:a.draws?fmtPct(a.winPct):'—', s:'rank among 100+ draw players', chip:chip},
     {l:'vs L / vs R', v:(pctOf(p[sit].vsL)!==null?Math.round(100*pctOf(p[sit].vsL))+'%':'—')+' / '+
@@ -965,14 +978,15 @@ function renderStats(){
 }
 
 function renderMap(){
-  const pid = curPid(), sit = curSit(), p = DATA[pid];
-  const a = playerAgg(pid, sit);
+  const pid = curPid(), sit = curSit(), hand = curHand(), p = DATA[pid];
+  const a = playerAgg(pid, sit, hand);
   renderStats();
   const g = drawRinkBase(document.getElementById('rink'));
   DOT_ORDER.forEach(k => drawDot(g, k, a.dots[k]));
   document.getElementById('rinkSub').textContent =
     p.name + ' (' + (p.hand||'?') + ') · ' + p.teamName + ' · ' +
-    ({ES:'Even strength',PP:'Power play',PK:'Penalty kill',ALL:'All situations'}[sit]||sit) + ' · ' + a.draws + ' draws · ' +
+    ({ES:'Even strength',PP:'Power play',PK:'Penalty kill',ALL:'All situations'}[sit]||sit) +
+    (hand!=='ALL'?' · '+HAND_LABEL[hand]:'') + ' · ' + a.draws + ' draws · ' +
     (a.draws?fmtPct(a.winPct):'—') + ' win rate · forward directions not displayed';
 }
 
@@ -1478,6 +1492,10 @@ function init(){
 
   document.querySelectorAll('#sitSeg button').forEach(b=>b.addEventListener('click',()=>{
     document.querySelectorAll('#sitSeg button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); renderMap();
+  }));
+  document.querySelectorAll('#handSeg button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#handSeg button').forEach(x=>x.classList.remove('active'));
     b.classList.add('active'); renderMap();
   }));
   document.querySelectorAll('.fo-header-btn').forEach(b=>

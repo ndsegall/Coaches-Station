@@ -5469,6 +5469,7 @@ def faceoffs_matchup(
             p = players.setdefault(str(r["pid"]), {
                 "team": r["team"],
                 "dots": {s: {} for s in FO_SITUATIONS},
+                "dotsByHand": {s: {"L": {}, "R": {}} for s in FO_SITUATIONS},
                 "vs": {s: {"L": [0, 0], "R": [0, 0]} for s in FO_SITUATIONS},
                 "h2h": {s: {} for s in FO_SITUATIONS},
                 "rec": {"PP": [0, 0], "SH": [0, 0], "EV": [0, 0]},
@@ -5489,6 +5490,17 @@ def faceoffs_matchup(
                 if r["oppHand"] in ("L", "R"):
                     v = p["vs"][sit][r["oppHand"]]
                     v[0] += r["won"]; v[1] += 1
+                    # Mirrors the "dots" accumulation above, scoped to draws
+                    # against that opponent hand only — feeds the Player Map's
+                    # opponent-handedness toggle without changing "dots" itself.
+                    hd = p["dotsByHand"][sit][r["oppHand"]].setdefault(
+                        r["dot"], {"wins": 0, "losses": 0, "sectors": {}})
+                    if r["won"]:
+                        hd["wins"] += 1
+                        if r["sector"] is not None:
+                            hd["sectors"][r["sector"]] = hd["sectors"].get(r["sector"], 0) + 1
+                    else:
+                        hd["losses"] += 1
                 if r["opp"] is not None:
                     h = p["h2h"][sit].setdefault(str(r["opp"]), [0, 0])
                     h[0] += r["won"]; h[1] += 1
@@ -5500,6 +5512,22 @@ def faceoffs_matchup(
                  for r in conn.execute("SELECT playerReferenceId, hand FROM faceoff_hands")}
         names = {str(r["playerReferenceId"]): r for r in conn.execute(
             "SELECT playerReferenceId, firstName, lastName, position, jersey FROM players")}
+
+        def _reshape_dots(raw_dots: dict) -> dict:
+            dots = {}
+            for dk, dv in raw_dots.items():
+                w = dv["wins"]
+                dirs = [{"sector": s, "count": c,
+                         "shareOfWins": round(c / w, 5) if w else 0,
+                         "forward": s in FORWARD_SECTORS}
+                        for s, c in sorted(dv["sectors"].items())]
+                dots[dk] = {
+                    "wins": w, "losses": dv["losses"], "total": w + dv["losses"],
+                    "winPct": round(w / (w + dv["losses"]), 5) if (w + dv["losses"]) else 0,
+                    "winsMissingDirection": w - sum(dv["sectors"].values()),
+                    "dirs": dirs,
+                }
+            return dots
 
         out = {}
         for pid, p in players.items():
@@ -5513,21 +5541,15 @@ def faceoffs_matchup(
                 "rec": p["rec"],
             }
             for sit in FO_SITUATIONS:
-                dots = {}
-                for dk, dv in p["dots"][sit].items():
-                    w = dv["wins"]
-                    dirs = [{"sector": s, "count": c,
-                             "shareOfWins": round(c / w, 5) if w else 0,
-                             "forward": s in FORWARD_SECTORS}
-                            for s, c in sorted(dv["sectors"].items())]
-                    dots[dk] = {
-                        "wins": w, "losses": dv["losses"], "total": w + dv["losses"],
-                        "winPct": round(w / (w + dv["losses"]), 5) if (w + dv["losses"]) else 0,
-                        "winsMissingDirection": w - sum(dv["sectors"].values()),
-                        "dirs": dirs,
-                    }
-                rec[sit] = {"dots": dots, "vsL": p["vs"][sit]["L"], "vsR": p["vs"][sit]["R"],
-                            "h2h": p["h2h"][sit]}
+                rec[sit] = {
+                    "dots": _reshape_dots(p["dots"][sit]),
+                    "dotsByHand": {
+                        "L": _reshape_dots(p["dotsByHand"][sit]["L"]),
+                        "R": _reshape_dots(p["dotsByHand"][sit]["R"]),
+                    },
+                    "vsL": p["vs"][sit]["L"], "vsR": p["vs"][sit]["R"],
+                    "h2h": p["h2h"][sit],
+                }
             out[pid] = rec
 
         # Fields Erik's front end already reads off META, so his render code
