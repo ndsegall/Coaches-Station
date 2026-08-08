@@ -955,6 +955,12 @@ function buildLegend(){
 
 function renderStats(){
   const pid = curPid(), sit = curSit(), hand = curHand(), p = DATA[pid];
+  if(!p){
+    document.getElementById('statRow').innerHTML =
+      '<div class="fo-stat-card"><div class="st-label">No data</div><div class="st-value">—</div>'+
+      '<div class="st-sub">No faceoff draws loaded yet for this matchup.</div></div>';
+    return;
+  }
   const a = playerAgg(pid, sit, hand);
   const field = Object.keys(DATA).map(x=>playerAgg(x,sit,hand)).filter(x=>x.draws>=100).map(x=>x.winPct);
   const chip = (a.draws>=100 && field.length>1) ? rankChip(a.winPct, field, false)
@@ -979,8 +985,14 @@ function renderStats(){
 
 function renderMap(){
   const pid = curPid(), sit = curSit(), hand = curHand(), p = DATA[pid];
-  const a = playerAgg(pid, sit, hand);
   renderStats();
+  if(!p){
+    drawRinkBase(document.getElementById('rink'));
+    document.getElementById('rinkSub').textContent =
+      'No players with faceoff draws for this matchup yet — PSF exports may not be loaded for this opponent.';
+    return;
+  }
+  const a = playerAgg(pid, sit, hand);
   const g = drawRinkBase(document.getElementById('rink'));
   DOT_ORDER.forEach(k => drawDot(g, k, a.dots[k]));
   document.getElementById('rinkSub').textContent =
