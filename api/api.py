@@ -655,6 +655,14 @@ def _combo_xg_pct(xg_map, combo):
     return round(xgf / (xgf + xga) * 100, 1)
 
 
+def _combo_toi_seconds(seconds_map, combo):
+    """5v5 icetime for one specific trio/pair, in seconds — same lookup
+    convention as _combo_xg_pct, keyed off the exact combo the line/pair
+    was assigned from in the first place (_manpower_combo_seconds), so
+    this can never disagree with the icetime that put the combo there."""
+    return round(seconds_map.get(tuple(sorted(str(p) for p in combo)), 0.0), 1)
+
+
 def _first_shift_times(conn, game_id: int, team_abbr: str, situation: str):
     """Finds the EARLIEST gameTime each forward/D combo appears together
     on the ice, for a given 5v5/5v4/4v5 situation.
@@ -1274,11 +1282,18 @@ def _pp_report_threaded(team_abbr: str, season: str | None = None, dates: list[s
 
 
 
-def compute_units(conn, game_id: int, team_abbr: str, situation: str):
-    """situation: '5v5' | '5v4' | '4v5' — returns forward/D combo icetime for team_abbr."""
+def compute_units(conn, game_id: int, team_abbr: str, situation: str, players: dict | None = None):
+    """situation: '5v5' | '5v4' | '4v5' — returns forward/D combo icetime for team_abbr.
+
+    players: pass in an already-fetched _player_names_for_team() result to
+    skip re-querying it (that query scans the team's entire play history,
+    not just this game — callers building multiple unit breakdowns for the
+    same team/game, like _build_lineup_sync_data, should fetch it once and
+    share it instead of paying for it again per situation)."""
     fwd_time, dmen_time = _manpower_combo_seconds(conn, game_id, team_abbr, situation)
-    team_full = full_name(team_abbr)
-    players = _player_names_for_team(conn, team_full)
+    if players is None:
+        team_full = full_name(team_abbr)
+        players = _player_names_for_team(conn, team_full)
 
     def fmt(combo_time):
         return [
@@ -1612,7 +1627,7 @@ async def _nhl_boxscore_stats_side(team_abbr: str, game_date: str, season: str):
         return None
 
 
-def _pp_units(conn, game_id: int, team_abbr: str):
+def _pp_units(conn, game_id: int, team_abbr: str, players: dict | None = None):
     """Full 5-skater (forwards + D combined) on-ice groupings while
     team_abbr is on the power play — kept as ONE group per combo rather
     than split by position, since PP units mix forwards/D freely (unlike
@@ -1664,7 +1679,8 @@ def _pp_units(conn, game_id: int, team_abbr: str):
         if group:
             unit_time[group] += dt
 
-    players = _player_names_for_team(conn, team_full)
+    if players is None:
+        players = _player_names_for_team(conn, team_full)
     return [
         {"players": [_name(players, p) for p in combo], "icetimeSeconds": round(t, 1)}
         for combo, t in sorted(unit_time.items(), key=lambda x: -x[1])
@@ -1768,6 +1784,8 @@ async def game_lineup(game_id: int, team: str = Query(..., description="Team abb
     extra_d_ids = data["extra_d_ids"]
     fwd_xg = data["fwd_xg"]
     dmen_xg = data["dmen_xg"]
+    fwd_total = data["fwd_total"]
+    dmen_total = data["dmen_total"]
     dpair_sides = data["dpair_sides"]
     starter_id = data["starter_id"]
     backup_id = data["backup_id"]
@@ -1795,6 +1813,7 @@ async def game_lineup(game_id: int, team: str = Query(..., description="Team abb
             "center": _name(players, int(center_id)) if center_id else None,
             "wings": [_name(players, int(p)) if p is not None else None for p in wings],
             "esXgPct": _combo_xg_pct(fwd_xg, trio),
+            "esToiSeconds": _combo_toi_seconds(fwd_total, trio),
         }
 
     def pair_out(sides, i):
@@ -1803,6 +1822,7 @@ async def game_lineup(game_id: int, team: str = Query(..., description="Team abb
             "LD": _name(players, int(sides["LD"])) if sides.get("LD") else None,
             "RD": _name(players, int(sides["RD"])) if sides.get("RD") else None,
             "esXgPct": _combo_xg_pct(dmen_xg, pairs[i]),
+            "esToiSeconds": _combo_toi_seconds(dmen_total, pairs[i]),
         }
 
     def _goalie_from_stats_side(is_starter: bool):
@@ -1983,11 +2003,11 @@ def _build_lineup_sync_data(game_id: int, team_abbr: str) -> dict:
         dpair_sides = _dpair_sides(conn, game_id, team_full, pairs)
 
         starter_id, backup_id = _starting_backup_goalie(conn, game_id, team_full)
-        pp_groups = _pp_units(conn, game_id, team_abbr)
+        pp_groups = _pp_units(conn, game_id, team_abbr, players=players)
         # PK forward pairs / D pairs: still ranked by total icetime (who
         # plays the PK the most), NOT starting-shift order — "PK1/PK2" is
         # conventionally about usage, unlike the 5v5 lines/pairs above.
-        pk = compute_units(conn, game_id, team_abbr, "4v5")
+        pk = compute_units(conn, game_id, team_abbr, "4v5", players=players)
         pk_forward_pairs = pk["forwardUnits"][:3]
         pk_d_pairs = pk["defenseUnits"][:3]
 
@@ -2003,6 +2023,8 @@ def _build_lineup_sync_data(game_id: int, team_abbr: str) -> dict:
             "extra_d_ids": extra_d_ids,
             "fwd_xg": fwd_xg,
             "dmen_xg": dmen_xg,
+            "fwd_total": fwd_total,
+            "dmen_total": dmen_total,
             "faceoff_counts": faceoff_counts,
             "dpair_sides": dpair_sides,
             "starter_id": starter_id,

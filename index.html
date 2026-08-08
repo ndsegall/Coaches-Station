@@ -10833,6 +10833,14 @@ function esXgPctCell(pct) {
   const s = esXgPctStyle(pct);
   return `<span style="justify-self:center;text-align:center;font-weight:600;font-size:0.72rem;border-radius:4px;padding:1px 4px;background:${s.bg};color:${s.fg};">${fmtEsXgPct(pct)}</span>`;
 }
+function fmtEsToi(sec) {
+  if (sec === null || sec === undefined) return '—';
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+function esToiCell(sec) {
+  return `<span style="text-align:right;font-size:0.72rem;color:var(--text3);">${fmtEsToi(sec)}</span>`;
+}
 
 function renderLineupSide(data, rosterMap, accentColor) {
   if (!data) {
@@ -10843,29 +10851,29 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // piecemeal per row — the team-name header and the whole lineup share
   // one font color, per request.
   const lineHeader = (data.forwardLines || []).length
-    ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES xG%</div>`
+    ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES TOI / xG%</div>`
     : '';
-  // One shared grid for the WHOLE block (not one grid per row) with
-  // auto-sized columns: the browser sizes each column to its own
-  // widest cell across every line, so LW/C/RW/badge all line up
-  // exactly regardless of name length — no guessing a fixed pixel
-  // width that's only barely wide enough for the longest realistic
-  // name (tried that; a name like NUGENT-HOPKINS came within a few px
-  // of its guessed column width and read as crammed against its
-  // neighbors even though the columns technically lined up).
-  const lineCells = (data.forwardLines || []).flatMap(line => {
+  // Plain 1fr name columns, same as the original layout — 1fr track
+  // sizing depends only on the row's own total width, never on any
+  // column's content, so it's the one approach that's guaranteed to
+  // line up identically across every independent row div. (Content-
+  // sized "auto" columns and guessed fixed pixel widths were both
+  // tried and both broke down on real player names.) TOI/pct are
+  // fixed-width because their content (a clock or a percentage) is
+  // short and consistent — unlike a surname, there's no long-tail
+  // width risk there. The trailing empty column pulls the TOI/pct
+  // pair back from the row's far-right edge by a fixed amount.
+  const lineRows = (data.forwardLines || []).map(line => {
     const [lw, rw] = orderWings(line.wings, rosterMap || {});
-    return [
-      `<span style="text-align:right;padding:2px 0;">${fmtPlayerLabel(lw)}</span>`,
-      `<span style="text-align:center;padding:2px 0;">${fmtPlayerLabel(line.center)}</span>`,
-      `<span style="padding:2px 0;">${fmtPlayerLabel(rw)}</span>`,
-      `<span></span>`,
-      `<span style="padding:2px 0;">${esXgPctCell(line.esXgPct)}</span>`,
-    ];
+    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 40px;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+      <span style="text-align:right;">${fmtPlayerLabel(lw)}</span>
+      <span style="text-align:center;">${fmtPlayerLabel(line.center)}</span>
+      <span>${fmtPlayerLabel(rw)}</span>
+      ${esToiCell(line.esToiSeconds)}
+      ${esXgPctCell(line.esXgPct)}
+      <span></span>
+    </div>`;
   }).join('');
-  const lineRows = (data.forwardLines || []).length
-    ? `<div style="display:grid;grid-template-columns:auto auto auto 14px auto;column-gap:6px;font-family:'DM Mono',monospace;font-size:0.78rem;">${lineCells}</div>`
-    : '';
 
   // An 11th/12th forward (or beyond) on an irregular-roster night — someone
   // who never had one consistent, clean trio. The common case is exactly
@@ -10894,18 +10902,21 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // columns reads fine for a full line, but two names crammed close
   // together read as one run-on name, so this pair needs more air.
   const pairHeader = (data.dPairs || []).length
-    ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES xG%</div>`
+    ? `<div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">ES TOI / xG%</div>`
     : '';
-  const pairCells = (data.dPairs || []).flatMap(pair => [
-    `<span style="text-align:right;padding:2px 0;">${fmtPlayerLabel(pair.LD)}</span>`,
-    `<span></span>`,
-    `<span style="padding:2px 0;">${fmtPlayerLabel(pair.RD)}</span>`,
-    `<span></span>`,
-    `<span style="padding:2px 0;">${esXgPctCell(pair.esXgPct)}</span>`,
-  ]);
-  const pairRows = (data.dPairs || []).length
-    ? `<div style="display:grid;grid-template-columns:auto 32px auto 4px auto;column-gap:8px;font-family:'DM Mono',monospace;font-size:0.78rem;">${pairCells.join('')}</div>`
-    : '';
+  // 32px empty spacer column keeps the original 48px-equivalent gap
+  // between LD/RD (8+32+8) while TOI/pct stay tight (8px) after RD —
+  // a single uniform `gap` can't give two different pairs of columns
+  // two different spacings, hence the explicit spacer track.
+  const pairRows = (data.dPairs || []).map(pair => `
+    <div style="display:grid;grid-template-columns:1fr 32px 1fr 54px 40px 40px;gap:8px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+      <span style="text-align:right;">${fmtPlayerLabel(pair.LD)}</span>
+      <span></span>
+      <span>${fmtPlayerLabel(pair.RD)}</span>
+      ${esToiCell(pair.esToiSeconds)}
+      ${esXgPctCell(pair.esXgPct)}
+      <span></span>
+    </div>`).join('');
 
   // A 7th (or beyond) defenseman on an irregular-roster night — someone
   // who never had one consistent pair partner gets listed on his own
