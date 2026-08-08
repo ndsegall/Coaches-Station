@@ -82,6 +82,34 @@ and usable daily without manual data uploads once PSF data is loaded.
   clone directly and treat this as the new primary editing location instead.
   Ask if it's unclear which direction to sync.
 
+## Deploying Erik's backend changes
+
+Erik works on this repo too, but doesn't have Fly.io access — deploys
+have to come from me. He commits and pushes his own backend (`api.py`)
+changes to `main` directly, testing locally first where possible, but
+he can't run `flyctl deploy` — so his changes sit live-in-git but not
+live-in-production until I do.
+
+**Deploy automatically, no need to ask me first:**
+- At the start of a session (or whenever you're about to do other work
+  in this repo), check `git log -- api.py` for commits authored by
+  Erik since the last deploy that haven't gone live yet.
+- `git pull`, skim the diff to `api.py` for anything that looks clearly
+  wrong (touches the DB schema in a way that looks destructive, changes
+  a query another tab depends on, etc.) — this is a sanity check, not a
+  full review.
+- If it looks reasonable, `flyctl deploy` from `Coaches Station API/`.
+  This is the same standing authorization I already have for my own
+  backend changes — Erik's commits get the same treatment, no separate
+  ask needed each time.
+- If something looks risky or a deploy fails, hold off and loop me in
+  directly rather than guessing or retrying blindly.
+
+One thing worth knowing: this means a backend change goes live to
+everyone the moment it's pushed to git, same as frontend changes
+already do — there's no human-in-the-loop gate on Erik's side of this
+specific flow anymore.
+
 ## Local development
 
 - **Frontend:** opening `index.html` via `file://` blocks the API calls it
