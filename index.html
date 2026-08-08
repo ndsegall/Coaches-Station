@@ -12623,13 +12623,55 @@ function setProgress(pct, text) {
   document.getElementById('slc-progress-text').textContent = text;
 }
 
+// Only the game date comes from the filename now — team identity comes
+// from the CSV data itself (extractTeamNames below), since filename
+// conventions vary by data provider/league (NHL PSF: playsequence-
+// 20260416-NHL-VANvsEDM-...; AHL PSF: 172623_2025-10-11_BAK-at-SJ...)
+// and any fixed pattern here would only ever cover the formats we'd
+// already seen. Accepts YYYYMMDD or YYYY-MM-DD/YYYY_MM_DD.
+//
+// Boundary checks (?<!\d) / (?!\d) are required, not cosmetic: without
+// them, a leading numeric ID like AHL's "172623_2025-10-11_..." lets the
+// regex hop from the tail of "172623" across the underscore into the
+// front of "2025" and stitch together a nonsense date (confirmed: this
+// produced "23-20-26" instead of 2025-10-11 before the boundary checks
+// were added). The backreference (\2) on the separator group similarly
+// stops it from matching with a DIFFERENT separator on each side.
+function parseGameDate(filename) {
+  let m = filename.match(/(?<!\d)(\d{4})([-_])(\d{2})\2(\d{2})(?!\d)/);
+  if (m) return `${parseInt(m[3])}-${m[4]}-${m[1].slice(2)}`;
+  m = filename.match(/(?<!\d)(\d{4})(\d{2})(\d{2})(?!\d)/);
+  if (m) return `${parseInt(m[2])}-${m[3]}-${m[1].slice(2)}`;
+  return null;
+}
+
+// Old filename-only parser, kept only for buildXML's internal (unused —
+// see note in buildXML) homeAbbr/awayAbbr fallback so that function's
+// signature doesn't need to change.
 function parseFilename(filename) {
-  // e.g. playsequence-20260416-NHL-VANvsEDM-20252026-21311.csv
-  const dateM = filename.match(/(\d{4})(\d{2})(\d{2})/);
-  const teamM = filename.match(/([A-Z]{2,4})vs([A-Z]{2,4})/);
-  if (!dateM || !teamM) return null;
-  const dateStr = `${parseInt(dateM[2])}-${dateM[3]}-${dateM[1].slice(2)}`;
+  const dateStr = parseGameDate(filename);
+  const teamM = filename.match(/([A-Z]{2,4})[-_]?(?:vs|at)[-_]?([A-Z]{2,4})/);
+  if (!dateStr || !teamM) return null;
   return { awayAbbr: teamM[1], homeAbbr: teamM[2], dateStr };
+}
+
+// The two teams playing, in first-appearance order in the data — every
+// row (including PSF's own on-ice tracking rows) carries the acting
+// team's full franchise name directly in the 'team' column, so this
+// works for any league/team without a hardcoded lookup table. Order
+// has no functional meaning (it only affects which team is listed
+// first in the output filename); the actual event codes always use
+// each row's own 'team' value directly, never this list.
+function extractTeamNames(rows) {
+  const seen = [];
+  for (const r of rows) {
+    const t = getVal(r, 'team');
+    if (t && !seen.includes(t)) {
+      seen.push(t);
+      if (seen.length === 2) break;
+    }
+  }
+  return seen;
 }
 
 // ─── Build timing table ──────────────────────────────────────────────────────
@@ -12732,10 +12774,13 @@ function renderFileList() {
   files.forEach((f, i) => {
     const div = document.createElement('div');
     div.className = 'slc-file-item';
-    const parsed = parseFilename(f.file.name);
+    let status;
+    if (f.teams === null) status = 'Reading…';
+    else if (f.teams.length === 2) status = f.teams.join(' vs ');
+    else status = 'Unknown — no team data found';
     div.innerHTML = `
       <span class="slc-file-name">${f.file.name}</span>
-      <span class="slc-file-status slc-ready">${parsed ? parsed.homeAbbr + ' vs ' + parsed.awayAbbr : 'Unknown'}</span>
+      <span class="slc-file-status slc-ready">${status}</span>
       <button class="slc-file-remove" data-i="${i}" title="Remove">×</button>`;
     list.appendChild(div);
   });
@@ -12743,15 +12788,18 @@ function renderFileList() {
   updateTeamMap();
 }
 
+// Keyed by the team's actual name (straight from the CSV's own 'team'
+// column) rather than a filename abbreviation — so this works for any
+// team in any league with no hardcoded list. The grid just lets the
+// user override what gets used in the OUTPUT FILENAME specifically;
+// it defaults to the exact name already found in the data, which is
+// already correct without any edits.
 function updateTeamMap() {
-  const abbrs = new Set();
-  files.forEach(f => {
-    const p = parseFilename(f.file.name);
-    if (p) { abbrs.add(p.homeAbbr); abbrs.add(p.awayAbbr); }
-  });
+  const names = new Set();
+  files.forEach(f => { (f.teams || []).forEach(t => names.add(t)); });
   const grid = document.getElementById('slc-team-map-grid');
-  if (abbrs.size === 0) {
-    grid.innerHTML = `<div class="slc-team-map-item" style="grid-column:1/-1;color:var(--text-dim);font-size:13px;border-style:dashed;">Team name mappings will appear here after you upload a CSV.</div>`;
+  if (names.size === 0) {
+    grid.innerHTML = `<div class="slc-team-map-item" style="grid-column:1/-1;color:var(--text-dim);font-size:13px;border-style:dashed;">Team names will appear here once your CSV(s) finish loading.</div>`;
     return;
   }
   // Preserve existing values
@@ -12759,31 +12807,12 @@ function updateTeamMap() {
   grid.querySelectorAll('.slc-team-map-input').forEach(inp => {
     existing[inp.dataset.abbr] = inp.value;
   });
-  // Known defaults
-  const knownTeams = {
-    VAN:'Vancouver Canucks', EDM:'Edmonton Oilers',
-    CAR:'Carolina Hurricanes', MTL:'Montreal Canadiens',
-    TOR:'Toronto Maple Leafs', BOS:'Boston Bruins',
-    NYR:'New York Rangers', PIT:'Pittsburgh Penguins',
-    CHI:'Chicago Blackhawks', DET:'Detroit Red Wings',
-    COL:'Colorado Avalanche', DAL:'Dallas Stars',
-    FLA:'Florida Panthers', TB:'Tampa Bay Lightning',
-    WSH:'Washington Capitals', MIN:'Minnesota Wild',
-    SEA:'Seattle Kraken', VGK:'Vegas Golden Knights',
-    NSH:'Nashville Predators', STL:'St. Louis Blues',
-    CGY:'Calgary Flames', WPG:'Winnipeg Jets',
-    OTT:'Ottawa Senators', BUF:'Buffalo Sabres',
-    NJD:'New Jersey Devils', PHI:'Philadelphia Flyers',
-    UTA:'Utah Mammoth', SJS:'San Jose Sharks',
-    ANA:'Anaheim Ducks', LAK:'Los Angeles Kings',
-    CBJ:'Columbus Blue Jackets', NYI:'New York Islanders',
-  };
   grid.innerHTML = '';
-  [...abbrs].sort().forEach(abbr => {
-    const val = existing[abbr] || teamMap[abbr] || knownTeams[abbr] || '';
+  [...names].sort().forEach(name => {
+    const val = existing[name] || teamMap[name] || name;
     const item = document.createElement('div');
     item.className = 'slc-team-map-item';
-    item.innerHTML = `<span class="slc-abbr-badge">${abbr}</span><input class="slc-team-map-input" type="text" data-abbr="${abbr}" value="${val}" placeholder="Full team name">`;
+    item.innerHTML = `<span class="slc-abbr-badge">${name}</span><input class="slc-team-map-input" type="text" data-abbr="${name}" value="${val}" placeholder="Full team name">`;
     grid.appendChild(item);
   });
 }
@@ -12804,12 +12833,28 @@ document.getElementById('slc-file-list').addEventListener('click', e => {
 });
 
 function addFiles(newFiles) {
+  const added = [];
   [...newFiles].forEach(f => {
     if (f.name.endsWith('.csv') && !files.find(x => x.file.name === f.name)) {
-      files.push({ file: f });
+      const entry = { file: f, teams: null };
+      files.push(entry);
+      added.push(entry);
     }
   });
   renderFileList();
+  // Read+parse each new file in the background so the file list can show
+  // the actual team names (from the data) rather than guessing from the
+  // filename — updates the badge/team-map in place once each finishes.
+  added.forEach(async entry => {
+    try {
+      entry._text = await entry.file.text();
+      const { rows } = parseCSV(entry._text);
+      entry.teams = extractTeamNames(rows);
+    } catch (e) {
+      entry.teams = [];
+    }
+    renderFileList();
+  });
 }
 
 const dropZone = document.getElementById('slc-drop-zone');
@@ -13213,14 +13258,15 @@ document.getElementById('slc-convert-btn').addEventListener('click', async () =>
   }
 
   for (const f of files) {
-    const parsed = parseFilename(f.file.name);
-    if (!parsed) { toast(`Could not parse filename: ${f.file.name}`, true); continue; }
-
-    const { homeAbbr, awayAbbr, dateStr } = parsed;
-    const homeName = tMap[homeAbbr] || homeAbbr;
-    const awayName = tMap[awayAbbr] || awayAbbr;
+    const dateStr = parseGameDate(f.file.name);
+    if (!dateStr) { toast(`Could not find a date in filename: ${f.file.name}`, true); continue; }
 
     const parseResult = parseCSV(f._text);
+    const teams = (f.teams && f.teams.length === 2) ? f.teams : extractTeamNames(parseResult.rows);
+    if (teams.length < 2) { toast(`Could not find two teams in the data for: ${f.file.name}`, true); continue; }
+    const [teamA, teamB] = teams;
+    const homeName = tMap[teamA] || teamA;
+    const awayName = tMap[teamB] || teamB;
     // Shootout isolation: flag the entire shootout phase (between the 'shootout' start and
     // stop markers), plus any so-prefixed event, the markers themselves, and the league's
     // decision goal (name 'goal' / type 'shootout'). Then keep ONLY the shootout shots and
