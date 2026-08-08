@@ -2,3 +2,6 @@
 *.db-wal
 *.db-shm
 .DS_Store
+__pycache__/
+*.pyc
+.claude/launch.json
