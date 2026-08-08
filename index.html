@@ -806,8 +806,20 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
   }
 
+  /* flex-shrink:0 here is load-bearing, not decoration: .trend-modal is a
+     flex ITEM of its .trend-modal-overlay parent, and flex-shrink
+     defaults to 1. Its own `overflow:auto` makes the browser treat its
+     automatic min-width as 0 (per spec, any overflow other than
+     'visible' does this) instead of 'auto', so once its content grows
+     tall enough — confirmed via the SL Converter's Output Files section
+     appearing after a real conversion — the flex algorithm becomes free
+     to shrink it below its own 100vw!important width, with nothing
+     visually indicating why. Reproduced directly: forcing flex-shrink:0
+     on the live element was the only thing that restored the full
+     width; nothing else (fonts, scrollbars, viewport size) changed. */
   #slc-overlay .trend-modal {
     width: 100vw !important;
     max-width: 100vw !important;
@@ -820,6 +832,7 @@
     overflow: auto;
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
   }
 
   /* Fixed view: 4 columns side by side */
@@ -2123,7 +2136,21 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- Toast ---- */
-#slc-root .slc-toast {
+/* #slc-toast is a DOM SIBLING of #slc-root (both direct children of
+   #slc-overlay), not a descendant of it — a selector of "#slc-root
+   .slc-toast" therefore never matches, so this rule (including
+   position:fixed) silently never applied. With no matching rule the
+   toast fell back to the default position:static/display:block, which
+   made it a second flex item inside #slc-overlay's flex row. It sat
+   there harmlessly while empty, but the moment a real conversion set
+   real text on it ("Generated N XML files"), it gained enough width to
+   start competing with #slc-root for space in that row — which is
+   exactly the "the window resizes when it's done" bug: the modal
+   visibly shrank/shifted right when conversion completed. Scoping to
+   #slc-overlay (the actual ancestor) restores position:fixed, which
+   removes it from flex layout entirely, same as any other fixed-
+   position toast on the page. */
+#slc-overlay .slc-toast {
   position: fixed; bottom: 24px; right: 24px;
   background: var(--navy);
   border: 1px solid var(--navy2);
@@ -2133,7 +2160,7 @@
   font-size: 0.85rem;
   box-shadow: 0 8px 32px rgba(0,0,0,0.25);
   transform: translateY(80px); opacity: 0; transition: all 0.3s; z-index: 100; max-width: 340px;
-}#slc-root .slc-toast.slc-show { transform: translateY(0); opacity: 1; }#slc-root .slc-toast.slc-toast-error { border-color: var(--bad-text); background: #7a1414; }
+}#slc-overlay .slc-toast.slc-show { transform: translateY(0); opacity: 1; }#slc-overlay .slc-toast.slc-toast-error { border-color: var(--bad-text); background: #7a1414; }
 
 .gc-sync-toast {
   position: fixed; bottom: 24px; right: 24px;
