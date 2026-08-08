@@ -10851,7 +10851,7 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // piecemeal per row — the team-name header and the whole lineup share
   // one font color, per request.
   const lineHeader = (data.forwardLines || []).length
-    ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 70px;gap:6px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 130px;gap:6px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">
         <span></span><span></span><span></span>
         <span style="grid-column:4 / 6;text-align:center;">ES TOI / xG%</span>
         <span></span>
@@ -10869,7 +10869,7 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // pair back from the row's far-right edge by a fixed amount.
   const lineRows = (data.forwardLines || []).map(line => {
     const [lw, rw] = orderWings(line.wings, rosterMap || {});
-    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 70px;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 130px;gap:6px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(lw)}</span>
       <span style="text-align:center;">${fmtPlayerLabel(line.center)}</span>
       <span>${fmtPlayerLabel(rw)}</span>
@@ -10906,7 +10906,7 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // columns reads fine for a full line, but two names crammed close
   // together read as one run-on name, so this pair needs more air.
   const pairHeader = (data.dPairs || []).length
-    ? `<div style="display:grid;grid-template-columns:1fr 32px 1fr 54px 40px 70px;gap:8px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">
+    ? `<div style="display:grid;grid-template-columns:1fr 32px 1fr 54px 40px 130px;gap:8px;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text3);margin-bottom:1px;">
         <span></span><span></span><span></span>
         <span style="grid-column:4 / 6;text-align:center;">ES TOI / xG%</span>
         <span></span>
@@ -10917,7 +10917,7 @@ function renderLineupSide(data, rosterMap, accentColor) {
   // a single uniform `gap` can't give two different pairs of columns
   // two different spacings, hence the explicit spacer track.
   const pairRows = (data.dPairs || []).map(pair => `
-    <div style="display:grid;grid-template-columns:1fr 32px 1fr 54px 40px 70px;gap:8px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
+    <div style="display:grid;grid-template-columns:1fr 32px 1fr 54px 40px 130px;gap:8px;padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;">
       <span style="text-align:right;">${fmtPlayerLabel(pair.LD)}</span>
       <span></span>
       <span>${fmtPlayerLabel(pair.RD)}</span>
@@ -10933,11 +10933,18 @@ function renderLineupSide(data, rosterMap, accentColor) {
   const extraDRows = (data.extraDefensemen || []).map(p => `
     <div style="padding:2px 0;font-family:'DM Mono',monospace;font-size:0.78rem;text-align:center;">${fmtPlayerLabel(p)}</div>`).join('');
 
-  // Centered under the forward lines and D pairs, rather than left-
-  // aligned like the rest of the section.
+  // Centered under the forward lines' and D pairs' NAME columns
+  // specifically (grid-column 1/4 of the same template those rows
+  // use), not the full row width — the row got a lot wider once TOI/
+  // xG% were added, so text-align:center over the whole thing no
+  // longer lands under the middle of the actual forwards/D names.
   const goalieRows = `
-    <div style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:2px 0;text-align:center;">${fmtPlayerLabel(data.goalies && data.goalies.starter)}</div>
-    <div style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:2px 0;text-align:center;">${data.goalies && data.goalies.backup ? fmtPlayerLabel(data.goalies.backup) : '—'}</div>`;
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 130px;gap:6px;font-family:'DM Mono',monospace;font-size:0.78rem;padding:2px 0;">
+      <span style="grid-column:1 / 4;text-align:center;">${fmtPlayerLabel(data.goalies && data.goalies.starter)}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 54px 40px 130px;gap:6px;font-family:'DM Mono',monospace;font-size:0.78rem;padding:2px 0;">
+      <span style="grid-column:1 / 4;text-align:center;">${data.goalies && data.goalies.backup ? fmtPlayerLabel(data.goalies.backup) : '—'}</span>
+    </div>`;
 
   function unitRow(unit) {
     if (!unit) return `<div style="font-size:0.72rem;">—</div>`;
